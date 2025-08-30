@@ -2,11 +2,16 @@
 
 namespace App\Models;
 
+use App\Models\Traits\BelongsToUser;
+use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Model;
+use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\HasMany;
 
 class Cliente extends Model
 {
+    use BelongsToUser; // ← escopo global + preenchimento automático de user_id
+
     // Libera os novos campos para preenchimento em massa
     protected $fillable = [
         'nome',
@@ -23,6 +28,7 @@ class Cliente extends Model
         'cidade',
         'uf',
         'observacoes',
+        'user_id',
     ];
 
     protected $casts = [
@@ -30,6 +36,11 @@ class Cliente extends Model
     ];
 
     /* ======================== Relations ======================== */
+
+    public function user(): BelongsTo
+    {
+        return $this->belongsTo(User::class);
+    }
 
     public function emprestimos(): HasMany
     {
@@ -41,7 +52,7 @@ class Cliente extends Model
     /**
      * Busca simples por nome, apelido, e-mail, CPF/WhatsApp (ignorando máscara).
      */
-    public function scopeSearch($query, ?string $term)
+    public function scopeSearch(Builder $query, ?string $term): Builder
     {
         $term = trim((string) $term);
         if ($term === '') {

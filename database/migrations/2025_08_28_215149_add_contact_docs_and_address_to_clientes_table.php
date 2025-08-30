@@ -10,7 +10,7 @@ return new class extends Migration
     {
         Schema::table('clientes', function (Blueprint $table) {
             // CONTATO / IDENTIFICAÇÃO
-            $table->string('email', 190)->nullable()->after('whatsapp');
+            $table->string('email', 190)->nullable();
             $table->string('cpf', 14)->nullable()->after('email'); // pode armazenar com máscara 000.000.000-00
             $table->string('rg', 20)->nullable()->after('cpf');
 

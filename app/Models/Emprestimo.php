@@ -2,6 +2,7 @@
 
 namespace App\Models;
 
+use App\Models\Traits\BelongsToUser;     // ← escopo global + fill automático
 use App\Services\LoanCalculator;
 use Carbon\Carbon;
 use Illuminate\Database\Eloquent\Model;
@@ -10,6 +11,8 @@ use Illuminate\Database\Eloquent\Relations\HasMany;
 
 class Emprestimo extends Model
 {
+    use BelongsToUser;
+
     protected $fillable = [
         'cliente_id',
         'valor_principal',
@@ -19,6 +22,7 @@ class Emprestimo extends Model
         'primeiro_vencimento',
         'status',
         'observacoes',
+        'user_id',               // ← importante para criação em massa / seeds / jobs
     ];
 
     protected $casts = [
@@ -26,6 +30,13 @@ class Emprestimo extends Model
         'taxa_periodo'        => 'decimal:6',
         'primeiro_vencimento' => 'date',
     ];
+
+    /* ======================== Relations ======================== */
+
+    public function user(): BelongsTo
+    {
+        return $this->belongsTo(User::class);
+    }
 
     public function cliente(): BelongsTo
     {
@@ -37,19 +48,17 @@ class Emprestimo extends Model
         return $this->hasMany(Parcela::class)->orderBy('numero');
     }
 
+    /* ======================== Domain =========================== */
+
     /**
      * Gera cronograma e salva Parcelas segundo as DUAS opções:
      *  - FIXED_ON_PRINCIPAL: parcela constante = amortização fixa + juros fixos sobre o principal
      *  - AMORTIZATION_ON_BALANCE: amortização fixa + juros sobre saldo (parcelas decrescentes)
      *
      * Usa LoanCalculator para manter regra única entre front e back.
-     *
-     * @param \App\Services\LoanCalculator|null $calc
-     * @return void
      */
     public function gerarCronograma(?LoanCalculator $calc = null): void
     {
-        // dados mínimos
         if (!$this->qtd_parcelas || !$this->valor_principal) {
             return;
         }
@@ -61,10 +70,11 @@ class Emprestimo extends Model
             n:  (int)   $this->qtd_parcelas,
             i:  (float) $this->taxa_periodo,
             loanType:   (string) $this->tipo_calculo,
-            firstDueDate: $this->primeiro_vencimento ?: Carbon::now()->addMonthNoOverflow()->toDateString()
+            firstDueDate: $this->primeiro_vencimento
+                ?: Carbon::now()->addMonthNoOverflow()->toDateString()
         );
 
-        // cuidado: em produção, verifique pagamentos antes de apagar
+        // Em produção, avalie pagamentos antes de apagar:
         $this->parcelas()->delete();
 
         foreach ($schedule as $row) {
@@ -76,6 +86,7 @@ class Emprestimo extends Model
                 'valor_parcela'     => $row['installment'],
                 'saldo_devedor'     => $row['balance'],
                 'status'            => 'aberta',
+                'user_id'           => $this->user_id, // ← propaga a “propriedade” para as parcelas
             ]);
         }
     }

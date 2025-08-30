@@ -2,12 +2,15 @@
 
 namespace App\Models;
 
+use App\Models\Traits\BelongsToUser; // ← escopo global + fill automático
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\HasMany;
 
 class Parcela extends Model
 {
+    use BelongsToUser;
+
     protected $fillable = [
         'emprestimo_id',
         'numero',
@@ -19,6 +22,7 @@ class Parcela extends Model
         'valor_pago',
         'pago_em',
         'status',
+        'user_id',               // ← importante p/ multitenancy
     ];
 
     protected $casts = [
@@ -31,12 +35,18 @@ class Parcela extends Model
         'valor_pago'         => 'decimal:2',
     ];
 
+    /* ======================== Relações ======================== */
+
+    public function user(): BelongsTo
+    {
+        return $this->belongsTo(User::class);
+    }
+
     public function emprestimo(): BelongsTo
     {
         return $this->belongsTo(Emprestimo::class);
     }
 
-    // === RELAÇÕES ===
     public function pagamentos(): HasMany
     {
         return $this->hasMany(Pagamento::class);
@@ -52,7 +62,7 @@ class Parcela extends Model
         return $this->hasMany(AjusteParcela::class, 'to_parcela_id');
     }
 
-    // === DERIVADOS ===
+    /* ======================== Derivados ======================== */
 
     /** Total efetivamente pago (histórico de pagamentos ou fallback no campo). */
     public function getTotalPagoAttribute(): float
@@ -62,7 +72,7 @@ class Parcela extends Model
     }
 
     /**
-     * Valor da parcela ajustado por transferências (ajustes) — novo nome.
+     * Valor da parcela ajustado por transferências (ajustes).
      * Base: valor_parcela - saídas + entradas.
      */
     public function getValorParcelaAjustadaAttribute(): float
@@ -72,15 +82,13 @@ class Parcela extends Model
         return round(((float) $this->valor_parcela - $out + $in), 2);
     }
 
-    /**
-     * Alias de compatibilidade com telas antigas (antes usava "valor_previsto_ajustado").
-     */
+    /** Alias de compatibilidade com telas antigas. */
     public function getValorPrevistoAjustadoAttribute(): float
     {
         return $this->valor_parcela_ajustada;
     }
 
-    /** Saldo atual dessa parcela (apenas da parcela, não do empréstimo). */
+    /** Saldo atual desta parcela. */
     public function getSaldoAtualAttribute(): float
     {
         return max(0, $this->valor_parcela_ajustada - $this->total_pago);
