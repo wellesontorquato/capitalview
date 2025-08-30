@@ -27,6 +27,8 @@ COPY package*.json ./
 # Se você não tiver package-lock.json, troque para `npm install`
 RUN npm ci || npm install
 
+COPY public ./public
+
 # Agora copia de fato os assets (inclui resources/)
 COPY resources ./resources
 COPY vite.config.* ./
@@ -60,7 +62,7 @@ COPY --from=composer_build /app/vendor ./vendor
 
 # Copia build do Vite (assets prontos)
 COPY --from=node_build /app/resources ./resources
-COPY --from=node_build /app/dist ./public/build
+COPY --from=node_build /app/public/build ./public/build
 
 # Permissões
 RUN chown -R www-data:www-data storage bootstrap/cache && \
