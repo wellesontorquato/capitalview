@@ -4,7 +4,10 @@
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
 
-    <title>{{ $title ?? config('app.name', 'Carteira') }}</title>
+    {{-- Favicon --}}
+    <link rel="icon" type="image/x-icon" href="{{ asset('assets/favicon.ico') }}">
+
+    <title>{{ $title ?? config('app.name', 'Laravel') . ' - Carteira' }}</title>
 
     @vite(['resources/css/app.css', 'resources/js/app.js'])
     @stack('head')
