@@ -1,8 +1,13 @@
 # -------- Stage 1: Composer deps --------
 FROM php:8.2-fpm-alpine AS composer_build
 
-RUN apk add --no-cache git unzip libzip-dev oniguruma-dev icu-dev && \
-    docker-php-ext-install pdo pdo_mysql mbstring zip intl
+# libs p/ extensões do PHP (inclui GD com jpeg+freetype)
+RUN apk add --no-cache git unzip libzip-dev oniguruma-dev icu-dev \
+    libpng-dev libjpeg-turbo-dev freetype-dev
+
+# Habilita extensões necessárias (inclui GD)
+RUN docker-php-ext-configure gd --with-freetype --with-jpeg && \
+    docker-php-ext-install pdo pdo_mysql mbstring zip intl gd
 
 WORKDIR /app
 
@@ -19,14 +24,15 @@ WORKDIR /app
 
 # Copia package.json/yarn.lock/pnpm-lock etc. (ajuste se usar yarn/pnpm)
 COPY package*.json ./
-RUN npm ci
+# Se você não tiver package-lock.json, troque para `npm install`
+RUN npm ci || npm install
 
 # Agora copia de fato os assets (inclui resources/)
 COPY resources ./resources
 COPY vite.config.* ./
 COPY tailwind.config.* ./
 COPY postcss.config.* ./
-# Se você tiver qualquer coisa em public/ que o build precise ler (raramente)
+# Se o build precisar ler algo de public/, descomente:
 # COPY public ./public
 
 RUN npm run build
@@ -35,8 +41,13 @@ RUN npm run build
 FROM php:8.2-fpm-alpine
 
 # Dependências do sistema e Nginx + Supervisor
-RUN apk add --no-cache nginx supervisor bash curl libzip-dev oniguruma-dev icu-dev tzdata && \
-    docker-php-ext-install pdo pdo_mysql mbstring zip intl && \
+RUN apk add --no-cache nginx supervisor bash curl tzdata \
+    libzip-dev oniguruma-dev icu-dev \
+    libpng-dev libjpeg-turbo-dev freetype-dev
+
+# Extensões PHP (inclui GD com jpeg+freetype)
+RUN docker-php-ext-configure gd --with-freetype --with-jpeg && \
+    docker-php-ext-install pdo pdo_mysql mbstring zip intl gd && \
     mkdir -p /run/nginx /var/log/supervisor
 
 WORKDIR /var/www/html
@@ -55,19 +66,18 @@ COPY --from=node_build /app/dist ./public/build
 RUN chown -R www-data:www-data storage bootstrap/cache && \
     chmod -R 775 storage bootstrap/cache
 
-# Otimizações Laravel (se APP_KEY já estiver setado no Railway)
-# Não falha se APP_KEY ainda não existir
+# Otimizações Laravel (não falha se APP_KEY ainda não existir)
 RUN php -r "file_exists('.env') || copy('.env.example', '.env');" || true
 
 # Nginx + Supervisor
 COPY ./deploy/nginx.conf /etc/nginx/nginx.conf
 COPY ./deploy/supervisord.conf /etc/supervisord.conf
 
-# Exponha a porta que o Railway usa dinamicamente via $PORT (Nginx ouvirá nela)
+# Porta dinâmica do Railway
 ENV PORT=8080
 ENV NGINX_PORT=8080
 
-# Substitui porta no nginx.conf em runtime (garante uso do $PORT do Railway)
+# Usa a porta do Railway no Nginx e sobe tudo
 CMD sed -i "s/NGINX_PORT/${PORT}/g" /etc/nginx/nginx.conf && \
     php artisan config:cache || true && \
     php artisan route:cache || true && \
