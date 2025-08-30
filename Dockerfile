@@ -1,48 +1,74 @@
-# -------- Stage 1: Node build (Vite) --------
-FROM node:20-alpine AS nodebuild
+# -------- Stage 1: Composer deps --------
+FROM php:8.2-fpm-alpine AS composer_build
+
+RUN apk add --no-cache git unzip libzip-dev oniguruma-dev icu-dev && \
+    docker-php-ext-install pdo pdo_mysql mbstring zip intl
+
 WORKDIR /app
+
+# Copia apenas composer.* primeiro (cache eficiente)
+COPY composer.json composer.lock ./
+RUN php -r "copy('https://getcomposer.org/installer', 'composer-setup.php');" \
+ && php composer-setup.php --install-dir=/usr/local/bin --filename=composer \
+ && rm composer-setup.php \
+ && composer install --no-dev --no-interaction --prefer-dist --optimize-autoloader
+
+# -------- Stage 2: Node build (Vite) --------
+FROM node:20-alpine AS node_build
+WORKDIR /app
+
+# Copia package.json/yarn.lock/pnpm-lock etc. (ajuste se usar yarn/pnpm)
 COPY package*.json ./
 RUN npm ci
+
+# Agora copia de fato os assets (inclui resources/)
 COPY resources ./resources
 COPY vite.config.* ./
-COPY tailwind.config.* postcss.config.* ./ 2>/dev/null || true
+COPY tailwind.config.* ./
+COPY postcss.config.* ./
+# Se você tiver qualquer coisa em public/ que o build precise ler (raramente)
+# COPY public ./public
+
 RUN npm run build
 
-# -------- Stage 2: Composer deps --------
-FROM composer:2 AS vendor
-WORKDIR /app
-COPY composer.json composer.lock ./
-RUN composer install --no-dev --prefer-dist --no-progress --no-interaction --no-scripts
-
-# -------- Stage 3: PHP-FPM runtime --------
+# -------- Stage 3: Runtime (PHP-FPM + Nginx + Supervisor) --------
 FROM php:8.2-fpm-alpine
 
-# Dependências do PHP e extensões
-RUN apk add --no-cache \
-    bash git curl libzip-dev oniguruma-dev icu-dev libpng-dev libjpeg-turbo-dev freetype-dev \
-    mariadb-connector-c-dev \
- && docker-php-ext-configure gd --with-freetype --with-jpeg \
- && docker-php-ext-install pdo_mysql mbstring zip gd intl bcmath opcache
+# Dependências do sistema e Nginx + Supervisor
+RUN apk add --no-cache nginx supervisor bash curl libzip-dev oniguruma-dev icu-dev tzdata && \
+    docker-php-ext-install pdo pdo_mysql mbstring zip intl && \
+    mkdir -p /run/nginx /var/log/supervisor
 
-# diretório de trabalho
 WORKDIR /var/www/html
 
-# Copia app (menos o que está no .dockerignore)
+# Copia app inteiro (menos o que o .dockerignore tirou)
 COPY . .
 
 # Copia vendor do stage Composer
-COPY --from=vendor /app/vendor ./vendor
+COPY --from=composer_build /app/vendor ./vendor
 
-# Copia build do Vite para public/
-COPY --from=nodebuild /app/dist ./public/build
+# Copia build do Vite (assets prontos)
+COPY --from=node_build /app/resources ./resources
+COPY --from=node_build /app/dist ./public/build
 
-# Otimizações Laravel
-RUN php artisan storage:link || true \
- && chown -R www-data:www-data storage bootstrap/cache \
- && chmod -R 775 storage bootstrap/cache
+# Permissões
+RUN chown -R www-data:www-data storage bootstrap/cache && \
+    chmod -R 775 storage bootstrap/cache
 
-# Opcional: configs de produção
-# COPY docker/php.ini /usr/local/etc/php/conf.d/app.ini
+# Otimizações Laravel (se APP_KEY já estiver setado no Railway)
+# Não falha se APP_KEY ainda não existir
+RUN php -r "file_exists('.env') || copy('.env.example', '.env');" || true
 
-EXPOSE 9000
-CMD ["php-fpm", "-y", "/usr/local/etc/php-fpm.conf", "-R"]
+# Nginx + Supervisor
+COPY ./deploy/nginx.conf /etc/nginx/nginx.conf
+COPY ./deploy/supervisord.conf /etc/supervisord.conf
+
+# Exponha a porta que o Railway usa dinamicamente via $PORT (Nginx ouvirá nela)
+ENV PORT=8080
+ENV NGINX_PORT=8080
+
+# Substitui porta no nginx.conf em runtime (garante uso do $PORT do Railway)
+CMD sed -i "s/NGINX_PORT/${PORT}/g" /etc/nginx/nginx.conf && \
+    php artisan config:cache || true && \
+    php artisan route:cache || true && \
+    /usr/bin/supervisord -c /etc/supervisord.conf
