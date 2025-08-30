@@ -96,7 +96,10 @@
   @endif
 
   <footer>
-    Este recibo foi gerado eletronicamente pelo sistema e não requer assinatura digital.
-  </footer>
+  Este recibo foi gerado eletronicamente pelo sistema, favor imprimir e assinar manualmente ou assinar digitalmente pelo 
+  <a href="https://www.gov.br/pt-br/servicos/assinatura-eletronica" target="_blank" style="text-decoration:none;">
+    <img src="https://barra.sistema.gov.br/v1/assets/govbr.webp" alt="GOV.BR" style="height:18px; vertical-align:middle; margin-left:4px;">
+  </a>
+</footer>
 </body>
 </html>
