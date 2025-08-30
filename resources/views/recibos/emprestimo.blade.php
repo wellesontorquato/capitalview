@@ -3,27 +3,36 @@
     $fmtMoeda = fn($v) => 'R$ ' . number_format((float)$v, 2, ',', '.');
     $fmtCPF   = function($cpf) {
         $cpf = preg_replace('/\D+/', '', (string)$cpf ?? '');
-        return strlen($cpf)===11 ? preg_replace('/(\d{3})(\d{3})(\d{3})(\d{2})/', '$1.$2.$3-$4', $cpf) : $cpf;
+        return strlen($cpf)===11
+            ? preg_replace('/(\d{3})(\d{3})(\d{3})(\d{2})/', '$1.$2.$3-$4', $cpf)
+            : $cpf;
     };
 @endphp
 <!doctype html>
 <html lang="pt-BR">
 <head>
 <meta charset="utf-8">
-<title>Recibo de Confissão de Dívida — Empréstimo #{{ $emprestimo->id }}</title>
+<title>Recibo de Confissão de Dívida — Empréstimo para {{ $cliente->nome }}</title>
 <style>
   *{ box-sizing:border-box; }
-  body{ font-family: DejaVu Sans, Arial, Helvetica, sans-serif; color:#111; margin:36px; }
+  body{ font-family: DejaVu Sans, Arial, Helvetica, sans-serif; color:#111;
+        margin:36px; display:flex; flex-direction:column; min-height:100vh; }
   h1{ font-size:20px; margin:0 0 16px; text-align:center; }
   p{ line-height:1.5; margin:12px 0; font-size:13px; }
   .muted{ color:#666; font-size:12px; }
-  .linha{ margin-top:32px; display:flex; gap:24px; }
-  .assin{ flex:1; text-align:center; }
-  .assin .traco{ margin-top:40px; border-top:1px solid #000; padding-top:6px; }
+
   .grid{ display:grid; grid-template-columns:1fr 1fr; gap:8px 24px; margin:10px 0 20px; }
   .label{ color:#555; font-size:12px; }
   .val{ font-weight:600; }
   .box{ border:1px solid #ddd; padding:12px; border-radius:8px; margin:12px 0; }
+
+  /* Assinaturas */
+  .assinaturas{ margin-top:80px; display:flex; gap:40px; }
+  .assin{ flex:1; text-align:center; }
+  .assin .traco{ margin-top:80px; border-top:1px solid #000; padding-top:6px; }
+
+  /* Footer no rodapé */
+  footer{ margin-top:auto; text-align:center; font-size:11px; color:#666; padding-top:20px; }
 </style>
 </head>
 <body>
@@ -64,7 +73,7 @@
     poderá ser utilizado em conjunto com o cronograma/contrato correspondente.
   </p>
 
-  <div class="linha">
+  <div class="assinaturas">
     <div class="assin">
       <div class="traco">Credor(a): {{ $credor['nome'] }}</div>
       @if(!empty($credor['cpf'])) <div class="muted">CPF {{ $fmtCPF($credor['cpf']) }}</div> @endif
@@ -73,13 +82,21 @@
       <div class="traco">Devedor(a): {{ $cliente->nome }}</div>
       @if(!empty($cliente->cpf)) <div class="muted">CPF {{ $fmtCPF($cliente->cpf) }}</div> @endif
     </div>
+    <div class="assin">
+      <div class="traco">Testemunha</div>
+      <div class="muted">Assinatura / CPF</div>
+    </div>
   </div>
 
   @if(!empty($credor['cidade']) || !empty($credor['uf']))
-    <p class="muted" style="margin-top:24px;">
+    <p class="muted" style="margin-top:32px;">
       {{ $credor['cidade'] ?? '' }}{{ !empty($credor['cidade']) && !empty($credor['uf']) ? ' - ' : '' }}{{ $credor['uf'] ?? '' }},
       {{ $hoje->translatedFormat('d \d\e F \d\e Y') }}
     </p>
   @endif
+
+  <footer>
+    Este recibo foi gerado eletronicamente pelo sistema e não requer assinatura digital.
+  </footer>
 </body>
 </html>
