@@ -105,6 +105,11 @@
                                 @csrf
                                 <button id="btn-quitar" type="button" class="btn btn-primary w-full sm:w-auto">Quitar tudo</button>
                             </form>
+                            <a href="{{ route('emprestimos.recibo', $emprestimo) }}"
+                                class="btn btn-secondary w-full sm:w-auto"
+                                target="_blank" rel="noopener">
+                                Gerar recibo (PDF)
+                            </a>
                         </div>
                     </div>
 

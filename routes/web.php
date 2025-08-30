@@ -52,6 +52,10 @@ Route::middleware('auth')->group(function () {
             // Quitar empréstimo
             Route::post('quitar', [EmprestimoController::class, 'quitar'])
                 ->name('emprestimos.quitar');
+
+            // Recibo empréstimo
+            Route::get('/emprestimos/{emprestimo}/recibo', [EmprestimoReciboController::class, 'download'])
+                ->name('emprestimos.recibo');
         });
 
     // Pagamento de parcela (total/parcial)
