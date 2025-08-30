@@ -1,6 +1,8 @@
 # -------- Stage 1: Composer deps --------
 FROM php:8.2-fpm-alpine AS composer_build
 
+ENV COMPOSER_ALLOW_SUPERUSER=1
+
 # libs p/ extensões do PHP (inclui GD com jpeg+freetype)
 RUN apk add --no-cache git unzip libzip-dev oniguruma-dev icu-dev \
     libpng-dev libjpeg-turbo-dev freetype-dev
@@ -13,29 +15,29 @@ WORKDIR /app
 
 # Copia apenas composer.* primeiro (cache eficiente)
 COPY composer.json composer.lock ./
+
+# Instala o Composer e as dependências, MAS sem rodar scripts (sem artisan aqui)
 RUN php -r "copy('https://getcomposer.org/installer', 'composer-setup.php');" \
  && php composer-setup.php --install-dir=/usr/local/bin --filename=composer \
  && rm composer-setup.php \
- && composer install --no-dev --no-interaction --prefer-dist --optimize-autoloader
+ && composer install --no-dev --no-interaction --prefer-dist --optimize-autoloader --no-scripts
 
 # -------- Stage 2: Node build (Vite) --------
 FROM node:20-alpine AS node_build
 WORKDIR /app
 
-# Copia package.json/yarn.lock/pnpm-lock etc. (ajuste se usar yarn/pnpm)
+# Copia package.json/yarn.lock/pnpm-lock etc.
 COPY package*.json ./
-# Se você não tiver package-lock.json, troque para `npm install`
 RUN npm ci || npm install
 
+# Vite escreve em public/build — precisamos da pasta public
 COPY public ./public
 
-# Agora copia de fato os assets (inclui resources/)
+# Agora os assets
 COPY resources ./resources
 COPY vite.config.* ./
 COPY tailwind.config.* ./
 COPY postcss.config.* ./
-# Se o build precisar ler algo de public/, descomente:
-# COPY public ./public
 
 RUN npm run build
 
@@ -57,7 +59,7 @@ WORKDIR /var/www/html
 # Copia app inteiro (menos o que o .dockerignore tirou)
 COPY . .
 
-# Copia vendor do stage Composer
+# Copia vendor do stage Composer (já instalado sem scripts)
 COPY --from=composer_build /app/vendor ./vendor
 
 # Copia build do Vite (assets prontos)
@@ -68,7 +70,7 @@ COPY --from=node_build /app/public/build ./public/build
 RUN chown -R www-data:www-data storage bootstrap/cache && \
     chmod -R 775 storage bootstrap/cache
 
-# Otimizações Laravel (não falha se APP_KEY ainda não existir)
+# Gera .env se não existir (não falha sem APP_KEY)
 RUN php -r "file_exists('.env') || copy('.env.example', '.env');" || true
 
 # Nginx + Supervisor
@@ -80,7 +82,9 @@ ENV PORT=8080
 ENV NGINX_PORT=8080
 
 # Usa a porta do Railway no Nginx e sobe tudo
+# Aqui, como já temos o app completo, podemos rodar scripts do artisan com segurança
 CMD sed -i "s/NGINX_PORT/${PORT}/g" /etc/nginx/nginx.conf && \
+    php artisan package:discover || true && \
     php artisan config:cache || true && \
     php artisan route:cache || true && \
     /usr/bin/supervisord -c /etc/supervisord.conf
