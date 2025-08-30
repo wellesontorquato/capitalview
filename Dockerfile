@@ -77,14 +77,11 @@ RUN php -r "file_exists('.env') || copy('.env.example', '.env');" || true
 COPY ./deploy/nginx.conf /etc/nginx/nginx.conf
 COPY ./deploy/supervisord.conf /etc/supervisord.conf
 
-# Porta dinâmica do Railway
+# Porta fixa do serviço
 ENV PORT=8080
-ENV NGINX_PORT=8080
 
-# Usa a porta do Railway no Nginx e sobe tudo
-# Aqui, como já temos o app completo, podemos rodar scripts do artisan com segurança
-CMD sed -i "s/NGINX_PORT/${PORT}/g" /etc/nginx/nginx.conf && \
-    php artisan package:discover || true && \
+# Sobe o app (sem sed); artisan só roda quando o app completo já está no estágio final
+CMD php artisan package:discover || true && \
     php artisan config:cache || true && \
     php artisan route:cache || true && \
     /usr/bin/supervisord -c /etc/supervisord.conf
