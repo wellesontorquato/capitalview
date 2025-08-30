@@ -5,6 +5,7 @@ use App\Http\Controllers\ClienteController;
 use App\Http\Controllers\EmprestimoController;
 use App\Http\Controllers\ParcelaController;
 use App\Http\Controllers\ProfileController;
+use App\Http\Controllers\EmprestimoReciboController; // ← importe o controller do recibo
 use Illuminate\Support\Facades\Route;
 
 Route::get('/', function () {
@@ -33,11 +34,11 @@ Route::middleware('auth')->group(function () {
         ->parameters(['emprestimos' => 'emprestimo'])
         ->whereNumber('emprestimo');
 
-    // Rotas extras de Empréstimos (cronograma, quitação etc.)
+    // Rotas extras de Empréstimos (cronograma, quitação, recibo, etc.)
     Route::prefix('emprestimos/{emprestimo}')
         ->whereNumber('emprestimo')
         ->group(function () {
-            // Alias de show como "cronograma" (opcional, mantém a URL separada)
+            // Alias de show como "cronograma"
             Route::get('cronograma', [EmprestimoController::class, 'show'])
                 ->name('emprestimos.cronograma');
 
@@ -53,8 +54,8 @@ Route::middleware('auth')->group(function () {
             Route::post('quitar', [EmprestimoController::class, 'quitar'])
                 ->name('emprestimos.quitar');
 
-            // Recibo empréstimo
-            Route::get('/emprestimos/{emprestimo}/recibo', [EmprestimoReciboController::class, 'download'])
+            // ✅ Recibo do empréstimo (NÃO repete o prefixo)
+            Route::get('recibo', [EmprestimoReciboController::class, 'download'])
                 ->name('emprestimos.recibo');
         });
 
@@ -62,8 +63,10 @@ Route::middleware('auth')->group(function () {
     Route::post('/parcelas/{parcela}/pagar', [ParcelaController::class, 'pagar'])
         ->whereNumber('parcela')
         ->name('parcelas.pagar');
-    
-    Route::put('/parcelas/{parcela}', [ParcelaController::class, 'update'])->name('parcelas.update');
+
+    Route::put('/parcelas/{parcela}', [ParcelaController::class, 'update'])
+        ->whereNumber('parcela')
+        ->name('parcelas.update');
 });
 
 // Rotas de auth (Breeze/Fortify/etc.)
