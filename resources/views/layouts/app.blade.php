@@ -6,6 +6,7 @@
 
     {{-- Favicon --}}
     <link rel="icon" type="image/x-icon" href="{{ asset('assets/favicon.ico') }}">
+    <script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
 
     <title>{{ $title ?? config('app.name', 'Laravel') . ' - Carteira' }}</title>
 
