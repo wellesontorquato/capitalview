@@ -6,13 +6,19 @@
     <div class="p-6 max-w-4xl space-y-6">
         {{-- Erros globais --}}
         @if ($errors->any())
-            <div class="mb-4 p-3 rounded bg-red-100 text-red-800">
-                <ul class="list-disc list-inside">
-                    @foreach ($errors->all() as $e)
-                        <li>{{ $e }}</li>
-                    @endforeach
-                </ul>
-            </div>
+        <script>
+            window.addEventListener('DOMContentLoaded', () => {
+            const msgs = @json($errors->all());
+            const html = '<ul style="text-align:left; margin:0; padding-left:1.1rem;">'
+                + msgs.map(m => `<li>${m}</li>`).join('')
+                + '</ul>';
+            if (window.Swal) {
+                Swal.fire({ icon:'error', title:'Corrija os campos abaixo', html });
+            } else {
+                alert('Erros:\n- ' + msgs.join('\n- '));
+            }
+            });
+        </script>
         @endif
 
         <form id="form-cliente" method="POST" action="{{ route('clientes.store') }}">
@@ -171,23 +177,19 @@
         </form>
     </div>
 
-    {{-- JS: máscaras + ViaCEP + normalização + validação + trava de submit/Enter --}}
     <script>
     (function () {
-    const $ = (sel, ctx=document) => ctx.querySelector(sel);
+    const $  = (sel, ctx=document) => ctx.querySelector(sel);
     const $$ = (sel, ctx=document) => Array.from(ctx.querySelectorAll(sel));
     const onlyDigits = v => (v || '').replace(/\D+/g, '');
 
     const form = $('#form-cliente');
-    if (!form) return; // página ainda não montou
+    if (!form) return;
 
-    // -------------------- helpers UI --------------------
+    // -------------------- UI helpers --------------------
     const notify = (opts) => {
-        if (window.Swal) {
-        Swal.fire(Object.assign({icon:'info', confirmButtonText:'OK'}, opts));
-        } else {
-        alert(opts.title ? `${opts.title}\n\n${opts.text||''}` : (opts.text||''));
-        }
+        if (window.Swal) Swal.fire(Object.assign({ icon:'info', confirmButtonText:'OK' }, opts));
+        else alert((opts.title? opts.title+'\n\n' : '') + (opts.text || ''));
     };
 
     const setSubmitting = (yes) => {
@@ -198,12 +200,11 @@
         btn.dataset._label ??= btn.textContent;
         btn.textContent = yes ? 'Salvando…' : btn.dataset._label;
         }
-        // bloqueia todos inputs para evitar alterações durante submit
-        $$('input, select, textarea', form).forEach(el => el.readOnly = !!yes);
+        // Não desabilite inputs/selects (senão não enviam). Só um feedback visual:
         form.classList.toggle('opacity-50', !!yes);
     };
 
-    // -------------------- validações simples --------------------
+    // -------------------- validações --------------------
     function cpfIsValid(raw) {
         const s = onlyDigits(raw);
         if (s.length !== 11 || /^(\d)\1{10}$/.test(s)) return false;
@@ -217,51 +218,53 @@
         const d2 = dv(s.slice(0,9) + d1);
         return s.endsWith(`${d1}${d2}`);
     }
-
-    const whatsappIsValid = (raw) => {
+    const whatsappIsValid = raw => {
         const d = onlyDigits(raw);
         return d.length === 10 || d.length === 11;
     };
+    const cepIsValid = raw => onlyDigits(raw).length === 8;
 
-    const cepIsValid = (raw) => onlyDigits(raw).length === 8;
-
-    // -------------------- Enter não submete (exceto textarea) --------------------
+    // -------------------- Enter não submete --------------------
     form.addEventListener('keydown', (e) => {
         if (e.key === 'Enter' && e.target.tagName !== 'TEXTAREA') e.preventDefault();
     });
 
-    // -------------------- máscaras visuais (sem “puxar” cursor) --------------------
-    function maskCPF(input){
-        const start = input.selectionStart;
-        let v = onlyDigits(input.value).slice(0,11)
-        .replace(/(\d{3})(\d)/, '$1.$2')
-        .replace(/(\d{3})(\d)/, '$1.$2')
-        .replace(/(\d{3})(\d{1,2})$/, '$1-$2');
-        input.value = v; try { input.setSelectionRange(start, start); } catch {}
+    // -------------------- máscaras --------------------
+    function keepCaret(el, cb) {
+        const s = el.selectionStart, e = el.selectionEnd;
+        cb();
+        try { el.setSelectionRange(s, e); } catch {}
     }
-    function maskCEP(input){
-        const start = input.selectionStart;
-        let v = onlyDigits(input.value).slice(0,8).replace(/(\d{5})(\d)/, '$1-$2');
-        input.value = v; try { input.setSelectionRange(start, start); } catch {}
+    function maskCPF(el){
+        keepCaret(el, () => {
+        el.value = onlyDigits(el.value).slice(0,11)
+            .replace(/(\d{3})(\d)/, '$1.$2')
+            .replace(/(\d{3})(\d)/, '$1.$2')
+            .replace(/(\d{3})(\d{1,2})$/, '$1-$2');
+        });
     }
-    function maskWhats(input){
-        const start = input.selectionStart;
-        let d = onlyDigits(input.value).slice(0,11);
-        let v;
-        if (d.length <= 10)
-        v = d.replace(/(\d{0,2})(\d{0,4})(\d{0,4})/, (_,a,b,c)=>(a?`(${a}`:'')+(a?') ':'')+(b||'')+(c?'-'+c:''));
-        else
-        v = d.replace(/(\d{0,2})(\d{0,5})(\d{0,4})/, (_,a,b,c)=>(a?`(${a}`:'')+(a?') ':'')+(b||'')+(c?'-'+c:''));
-        input.value = v.trim(); try { input.setSelectionRange(start, start); } catch {}
+    function maskCEP(el){
+        keepCaret(el, () => {
+        el.value = onlyDigits(el.value).slice(0,8)
+            .replace(/(\d{5})(\d)/, '$1-$2');
+        });
     }
+    function maskWhats(el){
+        keepCaret(el, () => {
+        const d = onlyDigits(el.value).slice(0,11);
+        el.value = (d.length <= 10)
+            ? d.replace(/(\d{0,2})(\d{0,4})(\d{0,4})/, (_,a,b,c)=>(a?`(${a}`:'')+(a?') ':'')+(b||'')+(c?'-'+c:''))
+            : d.replace(/(\d{0,2})(\d{0,5})(\d{0,4})/, (_,a,b,c)=>(a?`(${a}`:'')+(a?') ':'')+(b||'')+(c?'-'+c:''));
+        el.value = el.value.trim();
+        });
+    }
+    $$('.js-mask-cpf').forEach(el => { el.addEventListener('input', () => maskCPF(el)); maskCPF(el); });
+    $$('.js-mask-cep').forEach(el => { el.addEventListener('input', () => maskCEP(el)); maskCEP(el); });
+    $$('.js-mask-whatsapp').forEach(el => { el.addEventListener('input', () => maskWhats(el)); maskWhats(el); });
 
-    $$('.js-mask-cpf').forEach(el => { el.addEventListener('input', ()=>maskCPF(el)); maskCPF(el); });
-    $$('.js-mask-cep').forEach(el => { el.addEventListener('input', ()=>maskCEP(el)); maskCEP(el); });
-    $$('.js-mask-whatsapp').forEach(el => { el.addEventListener('input', ()=>maskWhats(el)); maskWhats(el); });
-
-    // paste: só dígitos
+    // paste só com dígitos
     $$('.js-mask-cpf, .js-mask-cep, .js-mask-whatsapp').forEach(el => {
-        el.addEventListener('paste', (e)=>{
+        el.addEventListener('paste', (e) => {
         e.preventDefault();
         const t = (e.clipboardData || window.clipboardData).getData('text');
         el.value = onlyDigits(t);
@@ -269,20 +272,19 @@
         });
     });
 
-    // -------------------- ViaCEP (com timeout e sem sobrescrever campos já preenchidos) --------------------
+    // -------------------- ViaCEP --------------------
     const cepInput = $('.js-cep');
     if (cepInput) {
         let inflight = null;
         cepInput.addEventListener('blur', async () => {
         const cep = onlyDigits(cepInput.value);
         if (cep.length !== 8) return;
-
         try {
             if (inflight) inflight.abort();
             const ctl = new AbortController(); inflight = ctl;
-            const timer = setTimeout(()=>ctl.abort(), 4000);
+            const timer = setTimeout(() => ctl.abort(), 4000);
 
-            const res = await fetch(`https://viacep.com.br/ws/${cep}/json/`, {signal: ctl.signal});
+            const res = await fetch(`https://viacep.com.br/ws/${cep}/json/`, { signal: ctl.signal });
             clearTimeout(timer); inflight = null;
 
             if (!res.ok) throw new Error('CEP não encontrado');
@@ -304,7 +306,23 @@
         });
     }
 
-    // -------------------- normalização + validação + trava dupla --------------------
+    // -------------------- Dirty tracking + beforeunload --------------------
+    let isDirty = false;
+    $$('#form-cliente input, #form-cliente select, #form-cliente textarea').forEach(el => {
+        el.addEventListener('input',  () => isDirty = true);
+        el.addEventListener('change', () => isDirty = true);
+    });
+
+    const beforeUnloadHandler = (e) => {
+        if (isDirty && form.dataset.submitted !== '1') {
+        e.preventDefault();
+        e.returnValue = '';
+        return '';
+        }
+    };
+    window.addEventListener('beforeunload', beforeUnloadHandler);
+
+    // -------------------- submit --------------------
     form.addEventListener('submit', (e) => {
         if (form.dataset.submitted === '1') { e.preventDefault(); return; }
 
@@ -318,35 +336,29 @@
         if (cep)      cep.value      = onlyDigits(cep.value).slice(0,8);
         if (email)    email.value    = (email.value || '').trim().toLowerCase();
 
-        // validações básicas antes de enviar
+        // validações
         if (cpf && !cpfIsValid(cpf.value)) {
         e.preventDefault();
-        notify({icon:'warning', title:'CPF inválido', text:'Verifique os dígitos do CPF informado.'});
+        notify({ icon:'warning', title:'CPF inválido', text:'Verifique os dígitos do CPF informado.' });
         return;
         }
         if (whatsapp && whatsapp.value && !whatsappIsValid(whatsapp.value)) {
         e.preventDefault();
-        notify({icon:'warning', title:'WhatsApp inválido', text:'Informe DDD + número (10 ou 11 dígitos).'});
+        notify({ icon:'warning', title:'WhatsApp inválido', text:'Informe DDD + número (10 ou 11 dígitos).' });
         return;
         }
         if (cep && cep.value && !cepIsValid(cep.value)) {
         e.preventDefault();
-        notify({icon:'warning', title:'CEP inválido', text:'Use 8 dígitos, ex.: 57084056.'});
+        notify({ icon:'warning', title:'CEP inválido', text:'Use 8 dígitos, ex.: 57084056.' });
         return;
         }
 
-        setSubmitting(true);
-        // proteção se usuário tentar sair durante o envio
-        window.addEventListener('beforeunload', beforeUnloadHandler);
-    });
+        // pronto para enviar: remove o alerta de saída
+        isDirty = false;
+        window.removeEventListener('beforeunload', beforeUnloadHandler);
 
-    function beforeUnloadHandler (e) {
-        if (form.dataset.submitted === '1') {
-        e.preventDefault();
-        e.returnValue = '';
-        return '';
-        }
-    }
+        setSubmitting(true);
+    });
     })();
     </script>
 
