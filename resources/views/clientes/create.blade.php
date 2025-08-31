@@ -171,99 +171,183 @@
         </form>
     </div>
 
-    {{-- JS: máscaras + ViaCEP + normalização + trava de submit/Enter --}}
+    {{-- JS: máscaras + ViaCEP + normalização + validação + trava de submit/Enter --}}
     <script>
-        const form = document.getElementById('form-cliente');
-        const onlyDigits = (v) => (v || '').replace(/\D+/g, '');
+    (function () {
+    const $ = (sel, ctx=document) => ctx.querySelector(sel);
+    const $$ = (sel, ctx=document) => Array.from(ctx.querySelectorAll(sel));
+    const onlyDigits = v => (v || '').replace(/\D+/g, '');
 
-        // Impede que Enter dispare submit fora de <textarea>
-        form.addEventListener('keydown', (e)=>{
-            if (e.key === 'Enter' && e.target.tagName !== 'TEXTAREA') {
-                e.preventDefault();
-            }
-        });
+    const form = $('#form-cliente');
+    if (!form) return; // página ainda não montou
 
-        // Trava submit duplo + normaliza antes de enviar
-        form.addEventListener('submit', (e)=>{
-            if (form.dataset.submitted === '1') { e.preventDefault(); return; }
-            // normalização
-            const cpf = form.querySelector('[name="cpf"]');
-            const whatsapp = form.querySelector('[name="whatsapp"]');
-            const cep = form.querySelector('[name="cep"]');
-            const email = form.querySelector('[name="email"]');
-
-            if (cpf)      cpf.value      = onlyDigits(cpf.value).slice(0,11);
-            if (whatsapp) whatsapp.value = onlyDigits(whatsapp.value).slice(0,11);
-            if (cep)      cep.value      = onlyDigits(cep.value).slice(0,8);
-            if (email)    email.value    = (email.value || '').trim().toLowerCase();
-
-            form.dataset.submitted = '1';
-            const btn = form.querySelector('button[type=submit]');
-            if (btn) { btn.disabled = true; }
-            form.classList.add('opacity-50');
-        });
-
-        // --- Máscaras visuais (mantidas)
-        function maskCPF(input){
-            let v = onlyDigits(input.value).slice(0,11);
-            v = v.replace(/(\d{3})(\d)/, '$1.$2')
-                 .replace(/(\d{3})(\d)/, '$1.$2')
-                 .replace(/(\d{3})(\d{1,2})$/, '$1-$2');
-            input.value = v;
+    // -------------------- helpers UI --------------------
+    const notify = (opts) => {
+        if (window.Swal) {
+        Swal.fire(Object.assign({icon:'info', confirmButtonText:'OK'}, opts));
+        } else {
+        alert(opts.title ? `${opts.title}\n\n${opts.text||''}` : (opts.text||''));
         }
-        function maskCEP(input){
-            let v = onlyDigits(input.value).slice(0,8);
-            v = v.replace(/(\d{5})(\d)/, '$1-$2');
-            input.value = v;
-        }
-        function maskWhats(input){
-            let v = onlyDigits(input.value).slice(0,11);
-            if (v.length <= 10) {
-                v = v.replace(/(\d{0,2})(\d{0,4})(\d{0,4})/, (_,a,b,c)=>
-                    (a?`(${a}`:'') + (a?') ':'') + (b||'') + (c?'-'+c:'')
-                );
-            } else {
-                v = v.replace(/(\d{0,2})(\d{0,5})(\d{0,4})/, (_,a,b,c)=>
-                    (a?`(${a}`:'') + (a?') ':'') + (b||'') + (c?'-'+c:'')
-                );
-            }
-            input.value = v.trim();
-        }
-        document.querySelectorAll('.js-mask-cpf').forEach(el=>{
-            el.addEventListener('input', ()=>maskCPF(el)); maskCPF(el);
-        });
-        document.querySelectorAll('.js-mask-cep').forEach(el=>{
-            el.addEventListener('input', ()=>maskCEP(el)); maskCEP(el);
-        });
-        document.querySelectorAll('.js-mask-whatsapp').forEach(el=>{
-            el.addEventListener('input', ()=>maskWhats(el)); maskWhats(el);
-        });
+    };
 
-        // --- ViaCEP
-        const cepInput = document.querySelector('.js-cep');
-        if (cepInput){
-            cepInput.addEventListener('blur', async ()=>{
-                const cep = onlyDigits(cepInput.value);
-                if (cep.length !== 8) return;
-
-                try{
-                    const res = await fetch(`https://viacep.com.br/ws/${cep}/json/`);
-                    if (!res.ok) throw new Error('CEP não encontrado');
-                    const data = await res.json();
-                    if (data.erro) throw new Error('CEP inválido');
-
-                    const setVal = (name, v) => {
-                        const el = document.querySelector(`[name="${name}"]`);
-                        if (el && (!el.value || el.value.trim()==='')) el.value = v || '';
-                    };
-                    setVal('logradouro', data.logradouro);
-                    setVal('bairro',     data.bairro);
-                    setVal('cidade',     data.localidade);
-                    setVal('uf',         data.uf);
-                }catch(e){
-                    console.warn(e);
-                }
-            });
+    const setSubmitting = (yes) => {
+        form.dataset.submitted = yes ? '1' : '0';
+        const btn = form.querySelector('button[type=submit]');
+        if (btn) {
+        btn.disabled = !!yes;
+        btn.dataset._label ??= btn.textContent;
+        btn.textContent = yes ? 'Salvando…' : btn.dataset._label;
         }
+        // bloqueia todos inputs para evitar alterações durante submit
+        $$('input, select, textarea', form).forEach(el => el.readOnly = !!yes);
+        form.classList.toggle('opacity-50', !!yes);
+    };
+
+    // -------------------- validações simples --------------------
+    function cpfIsValid(raw) {
+        const s = onlyDigits(raw);
+        if (s.length !== 11 || /^(\d)\1{10}$/.test(s)) return false;
+        const dv = (base) => {
+        let sum = 0, w = base.length + 1;
+        for (let c of base) sum += parseInt(c,10) * w--;
+        let r = sum % 11; r = (r < 2) ? 0 : 11 - r;
+        return r;
+        };
+        const d1 = dv(s.slice(0,9));
+        const d2 = dv(s.slice(0,9) + d1);
+        return s.endsWith(`${d1}${d2}`);
+    }
+
+    const whatsappIsValid = (raw) => {
+        const d = onlyDigits(raw);
+        return d.length === 10 || d.length === 11;
+    };
+
+    const cepIsValid = (raw) => onlyDigits(raw).length === 8;
+
+    // -------------------- Enter não submete (exceto textarea) --------------------
+    form.addEventListener('keydown', (e) => {
+        if (e.key === 'Enter' && e.target.tagName !== 'TEXTAREA') e.preventDefault();
+    });
+
+    // -------------------- máscaras visuais (sem “puxar” cursor) --------------------
+    function maskCPF(input){
+        const start = input.selectionStart;
+        let v = onlyDigits(input.value).slice(0,11)
+        .replace(/(\d{3})(\d)/, '$1.$2')
+        .replace(/(\d{3})(\d)/, '$1.$2')
+        .replace(/(\d{3})(\d{1,2})$/, '$1-$2');
+        input.value = v; try { input.setSelectionRange(start, start); } catch {}
+    }
+    function maskCEP(input){
+        const start = input.selectionStart;
+        let v = onlyDigits(input.value).slice(0,8).replace(/(\d{5})(\d)/, '$1-$2');
+        input.value = v; try { input.setSelectionRange(start, start); } catch {}
+    }
+    function maskWhats(input){
+        const start = input.selectionStart;
+        let d = onlyDigits(input.value).slice(0,11);
+        let v;
+        if (d.length <= 10)
+        v = d.replace(/(\d{0,2})(\d{0,4})(\d{0,4})/, (_,a,b,c)=>(a?`(${a}`:'')+(a?') ':'')+(b||'')+(c?'-'+c:''));
+        else
+        v = d.replace(/(\d{0,2})(\d{0,5})(\d{0,4})/, (_,a,b,c)=>(a?`(${a}`:'')+(a?') ':'')+(b||'')+(c?'-'+c:''));
+        input.value = v.trim(); try { input.setSelectionRange(start, start); } catch {}
+    }
+
+    $$('.js-mask-cpf').forEach(el => { el.addEventListener('input', ()=>maskCPF(el)); maskCPF(el); });
+    $$('.js-mask-cep').forEach(el => { el.addEventListener('input', ()=>maskCEP(el)); maskCEP(el); });
+    $$('.js-mask-whatsapp').forEach(el => { el.addEventListener('input', ()=>maskWhats(el)); maskWhats(el); });
+
+    // paste: só dígitos
+    $$('.js-mask-cpf, .js-mask-cep, .js-mask-whatsapp').forEach(el => {
+        el.addEventListener('paste', (e)=>{
+        e.preventDefault();
+        const t = (e.clipboardData || window.clipboardData).getData('text');
+        el.value = onlyDigits(t);
+        el.dispatchEvent(new Event('input'));
+        });
+    });
+
+    // -------------------- ViaCEP (com timeout e sem sobrescrever campos já preenchidos) --------------------
+    const cepInput = $('.js-cep');
+    if (cepInput) {
+        let inflight = null;
+        cepInput.addEventListener('blur', async () => {
+        const cep = onlyDigits(cepInput.value);
+        if (cep.length !== 8) return;
+
+        try {
+            if (inflight) inflight.abort();
+            const ctl = new AbortController(); inflight = ctl;
+            const timer = setTimeout(()=>ctl.abort(), 4000);
+
+            const res = await fetch(`https://viacep.com.br/ws/${cep}/json/`, {signal: ctl.signal});
+            clearTimeout(timer); inflight = null;
+
+            if (!res.ok) throw new Error('CEP não encontrado');
+            const data = await res.json();
+            if (data.erro) throw new Error('CEP inválido');
+
+            const setIfEmpty = (name, v) => {
+            const el = $(`[name="${name}"]`);
+            if (el && (!el.value || el.value.trim() === '')) el.value = v || '';
+            };
+            setIfEmpty('logradouro', data.logradouro);
+            setIfEmpty('bairro',     data.bairro);
+            setIfEmpty('cidade',     data.localidade);
+            const ufSel = $('[name="uf"]');
+            if (ufSel && (!ufSel.value || ufSel.value === '')) ufSel.value = data.uf || '';
+        } catch (e) {
+            console.warn(e);
+        }
+        });
+    }
+
+    // -------------------- normalização + validação + trava dupla --------------------
+    form.addEventListener('submit', (e) => {
+        if (form.dataset.submitted === '1') { e.preventDefault(); return; }
+
+        const cpf      = $('[name="cpf"]');
+        const whatsapp = $('[name="whatsapp"]');
+        const cep      = $('[name="cep"]');
+        const email    = $('[name="email"]');
+
+        if (cpf)      cpf.value      = onlyDigits(cpf.value).slice(0,11);
+        if (whatsapp) whatsapp.value = onlyDigits(whatsapp.value).slice(0,11);
+        if (cep)      cep.value      = onlyDigits(cep.value).slice(0,8);
+        if (email)    email.value    = (email.value || '').trim().toLowerCase();
+
+        // validações básicas antes de enviar
+        if (cpf && !cpfIsValid(cpf.value)) {
+        e.preventDefault();
+        notify({icon:'warning', title:'CPF inválido', text:'Verifique os dígitos do CPF informado.'});
+        return;
+        }
+        if (whatsapp && whatsapp.value && !whatsappIsValid(whatsapp.value)) {
+        e.preventDefault();
+        notify({icon:'warning', title:'WhatsApp inválido', text:'Informe DDD + número (10 ou 11 dígitos).'});
+        return;
+        }
+        if (cep && cep.value && !cepIsValid(cep.value)) {
+        e.preventDefault();
+        notify({icon:'warning', title:'CEP inválido', text:'Use 8 dígitos, ex.: 57084056.'});
+        return;
+        }
+
+        setSubmitting(true);
+        // proteção se usuário tentar sair durante o envio
+        window.addEventListener('beforeunload', beforeUnloadHandler);
+    });
+
+    function beforeUnloadHandler (e) {
+        if (form.dataset.submitted === '1') {
+        e.preventDefault();
+        e.returnValue = '';
+        return '';
+        }
+    }
+    })();
     </script>
+
 </x-app-layout>
