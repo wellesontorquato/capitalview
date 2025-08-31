@@ -15,8 +15,10 @@
             </div>
         @endif
 
-        <form method="POST" action="{{ route('clientes.store') }}" class="space-y-8" id="clienteForm">
+        <form id="form-cliente" method="POST" action="{{ route('clientes.store') }}">
             @csrf
+            @php use Illuminate\Support\Str; @endphp
+            <input type="hidden" name="idempotency_key" value="{{ (string) Str::uuid() }}">
 
             {{-- Dados básicos --}}
             <section>
@@ -49,7 +51,7 @@
 
                     <div>
                         <label class="block text-sm mb-1">E-mail (opcional)</label>
-                        <input name="email" type="email" autocomplete="email"
+                        <input name="email" type="email" autocomplete="email" autocapitalize="off"
                                value="{{ old('email') }}"
                                class="border rounded-xl w-full px-3 py-2">
                         @error('email')<div class="text-sm text-red-600 mt-1">{{ $message }}</div>@enderror
@@ -165,16 +167,44 @@
 
             <div class="flex items-center gap-2">
                 <a href="{{ route('clientes.index') }}" class="px-4 py-2 rounded-xl border">Cancelar</a>
-                <button class="btn btn-primary">Salvar</button>
+                <button type="submit" class="btn btn-primary">Salvar</button>
             </div>
         </form>
     </div>
 
-    {{-- JS: máscaras simples + ViaCEP --}}
+    {{-- JS: máscaras + ViaCEP + normalização + trava de submit/Enter --}}
     <script>
-        // ---- Helpers de máscara bem simples (sem lib)
+        const form = document.getElementById('form-cliente');
         const onlyDigits = (v) => (v || '').replace(/\D+/g, '');
 
+        // Impede que Enter dispare submit fora de <textarea>
+        form.addEventListener('keydown', (e)=>{
+            if (e.key === 'Enter' && e.target.tagName !== 'TEXTAREA') {
+                e.preventDefault();
+            }
+        });
+
+        // Trava submit duplo + normaliza antes de enviar
+        form.addEventListener('submit', (e)=>{
+            if (form.dataset.submitted === '1') { e.preventDefault(); return; }
+            // normalização
+            const cpf = form.querySelector('[name="cpf"]');
+            const whatsapp = form.querySelector('[name="whatsapp"]');
+            const cep = form.querySelector('[name="cep"]');
+            const email = form.querySelector('[name="email"]');
+
+            if (cpf)      cpf.value      = onlyDigits(cpf.value).slice(0,11);
+            if (whatsapp) whatsapp.value = onlyDigits(whatsapp.value).slice(0,11);
+            if (cep)      cep.value      = onlyDigits(cep.value).slice(0,8);
+            if (email)    email.value    = (email.value || '').trim().toLowerCase();
+
+            form.dataset.submitted = '1';
+            const btn = form.querySelector('button[type=submit]');
+            if (btn) { btn.disabled = true; }
+            form.classList.add('opacity-50');
+        });
+
+        // --- Máscaras visuais (mantidas)
         function maskCPF(input){
             let v = onlyDigits(input.value).slice(0,11);
             v = v.replace(/(\d{3})(\d)/, '$1.$2')
@@ -182,41 +212,35 @@
                  .replace(/(\d{3})(\d{1,2})$/, '$1-$2');
             input.value = v;
         }
-
         function maskCEP(input){
             let v = onlyDigits(input.value).slice(0,8);
             v = v.replace(/(\d{5})(\d)/, '$1-$2');
             input.value = v;
         }
-
         function maskWhats(input){
-            let v = onlyDigits(input.value).slice(0,11); // DDD + 9 + 8
+            let v = onlyDigits(input.value).slice(0,11);
             if (v.length <= 10) {
-                v = v.replace(/(\d{0,2})(\d{0,4})(\d{0,4})/, function(_,a,b,c){
-                    return (a?`(${a}`:'') + (a?') ':'') + (b?b:'') + (c?'-'+c:'');
-                });
+                v = v.replace(/(\d{0,2})(\d{0,4})(\d{0,4})/, (_,a,b,c)=>
+                    (a?`(${a}`:'') + (a?') ':'') + (b||'') + (c?'-'+c:'')
+                );
             } else {
-                v = v.replace(/(\d{0,2})(\d{0,5})(\d{0,4})/, function(_,a,b,c){
-                    return (a?`(${a}`:'') + (a?') ':'') + (b?b:'') + (c?'-'+c:'');
-                });
+                v = v.replace(/(\d{0,2})(\d{0,5})(\d{0,4})/, (_,a,b,c)=>
+                    (a?`(${a}`:'') + (a?') ':'') + (b||'') + (c?'-'+c:'')
+                );
             }
             input.value = v.trim();
         }
-
         document.querySelectorAll('.js-mask-cpf').forEach(el=>{
-            el.addEventListener('input', ()=>maskCPF(el));
-            maskCPF(el);
+            el.addEventListener('input', ()=>maskCPF(el)); maskCPF(el);
         });
         document.querySelectorAll('.js-mask-cep').forEach(el=>{
-            el.addEventListener('input', ()=>maskCEP(el));
-            maskCEP(el);
+            el.addEventListener('input', ()=>maskCEP(el)); maskCEP(el);
         });
         document.querySelectorAll('.js-mask-whatsapp').forEach(el=>{
-            el.addEventListener('input', ()=>maskWhats(el));
-            maskWhats(el);
+            el.addEventListener('input', ()=>maskWhats(el)); maskWhats(el);
         });
 
-        // ---- ViaCEP: ao sair do CEP, busca e preenche
+        // --- ViaCEP
         const cepInput = document.querySelector('.js-cep');
         if (cepInput){
             cepInput.addEventListener('blur', async ()=>{
@@ -224,8 +248,6 @@
                 if (cep.length !== 8) return;
 
                 try{
-                    // feedback leve
-                    cepInput.dataset.loading = '1';
                     const res = await fetch(`https://viacep.com.br/ws/${cep}/json/`);
                     if (!res.ok) throw new Error('CEP não encontrado');
                     const data = await res.json();
@@ -235,15 +257,12 @@
                         const el = document.querySelector(`[name="${name}"]`);
                         if (el && (!el.value || el.value.trim()==='')) el.value = v || '';
                     };
-
                     setVal('logradouro', data.logradouro);
                     setVal('bairro',     data.bairro);
                     setVal('cidade',     data.localidade);
                     setVal('uf',         data.uf);
                 }catch(e){
                     console.warn(e);
-                }finally{
-                    delete cepInput.dataset.loading;
                 }
             });
         }
