@@ -17,7 +17,6 @@
 
         <form id="form-cliente" method="POST" action="{{ route('clientes.store') }}">
             @csrf
-            @php use Illuminate\Support\Str; @endphp
             <input type="hidden" name="idempotency_key" value="{{ (string) Str::uuid() }}">
 
             {{-- Dados básicos --}}
