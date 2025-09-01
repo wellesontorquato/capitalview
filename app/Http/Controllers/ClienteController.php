@@ -33,7 +33,7 @@ class ClienteController extends Controller
     /* ============================ STORE ============================ */
     public function store(Request $request)
     {
-        // --- (opcional) trava simples por idempotency_key por 20s
+        // (opcional) trava por idempotency_key por 20s
         if ($key = $request->input('idempotency_key')) {
             $lockKey = 'clientes:create:' . $key;
             if (! Cache::add($lockKey, 1, now()->addSeconds(20))) {
@@ -43,13 +43,28 @@ class ClienteController extends Controller
             }
         }
 
-        // validação com unicidade
-        $data = $request->validate([
+        // --- validação (unicidade por usuário)
+        $uid = auth()->id();
+
+        $rules = [
             'nome'        => ['required','string','max:255'],
             'apelido'     => ['nullable','string','max:255'],
-            'whatsapp'    => ['nullable','string','max:30','unique:clientes,whatsapp'],
-            'email'       => ['nullable','email','max:255','unique:clientes,email'],
-            'cpf'         => ['required','string','max:20','unique:clientes,cpf'],
+
+            'whatsapp'    => [
+                'nullable','string','max:30',
+                Rule::unique('clientes','whatsapp')
+                    ->where(fn($q) => $q->where('user_id', $uid)),
+            ],
+            'email'       => [
+                'nullable','email','max:255',
+                Rule::unique('clientes','email')
+                    ->where(fn($q) => $q->where('user_id', $uid)),
+            ],
+            'cpf'         => [
+                'required','string','max:20',
+                Rule::unique('clientes','cpf')
+                    ->where(fn($q) => $q->where('user_id', $uid)),
+            ],
             'rg'          => ['nullable','string','max:30'],
 
             'cep'         => ['nullable','string','max:12'],
@@ -61,21 +76,32 @@ class ClienteController extends Controller
             'uf'          => ['nullable','string','size:2'],
 
             'observacoes' => ['nullable','string'],
-        ]);
+        ];
 
-        // normalização antes de persistir
+        // mensagens de apoio (caso o lang/validation.php ainda não esteja com os rótulos)
+        $messages = [
+            'cpf.unique'      => 'Já existe um cliente cadastrado com este CPF.',
+            'email.unique'    => 'Este e-mail já está sendo usado por outro cliente.',
+            'whatsapp.unique' => 'Este WhatsApp já está em uso.',
+        ];
+
+        $data = $request->validate($rules, $messages);
+
+        // normalização e vínculo ao dono
         $data = $this->normalize($data);
+        $data['user_id'] = $uid;
 
         try {
-            // Chave natural para evitar duplicidade simultânea
-            $naturalKey = $this->pickNaturalKey($data); // cpf > email > whatsapp
-            if ($naturalKey) {
-                Cliente::updateOrCreate([$naturalKey => $data[$naturalKey]], $data);
+            // chave natural (scopada por user) para evitar duplicidade simultânea
+            if ($naturalKey = $this->pickNaturalKey($data)) {
+                Cliente::updateOrCreate(
+                    ['user_id' => $uid, $naturalKey => $data[$naturalKey]],
+                    $data
+                );
             } else {
                 Cliente::create($data);
             }
         } catch (QueryException $e) {
-            // Erros de índice único -> mensagem amigável
             $msg = $this->uniqueErrorMessage($e);
             return back()->withInput()->with('error', $msg ?: 'Não foi possível salvar o cliente.');
         }
@@ -105,12 +131,30 @@ class ClienteController extends Controller
     /* ============================ UPDATE =========================== */
     public function update(Request $request, Cliente $cliente)
     {
-        $data = $request->validate([
+        $uid = auth()->id();
+
+        $rules = [
             'nome'        => ['required','string','max:255'],
             'apelido'     => ['nullable','string','max:255'],
-            'whatsapp'    => ['nullable','string','max:30', Rule::unique('clientes','whatsapp')->ignore($cliente->id)],
-            'email'       => ['nullable','email','max:255', Rule::unique('clientes','email')->ignore($cliente->id)],
-            'cpf'         => ['required','string','max:20', Rule::unique('clientes','cpf')->ignore($cliente->id)],
+
+            'whatsapp'    => [
+                'nullable','string','max:30',
+                Rule::unique('clientes','whatsapp')
+                    ->where(fn($q) => $q->where('user_id', $uid))
+                    ->ignore($cliente->id),
+            ],
+            'email'       => [
+                'nullable','email','max:255',
+                Rule::unique('clientes','email')
+                    ->where(fn($q) => $q->where('user_id', $uid))
+                    ->ignore($cliente->id),
+            ],
+            'cpf'         => [
+                'required','string','max:20',
+                Rule::unique('clientes','cpf')
+                    ->where(fn($q) => $q->where('user_id', $uid))
+                    ->ignore($cliente->id),
+            ],
             'rg'          => ['nullable','string','max:30'],
 
             'cep'         => ['nullable','string','max:12'],
@@ -122,8 +166,15 @@ class ClienteController extends Controller
             'uf'          => ['nullable','string','size:2'],
 
             'observacoes' => ['nullable','string'],
-        ]);
+        ];
 
+        $messages = [
+            'cpf.unique'      => 'Já existe um cliente cadastrado com este CPF.',
+            'email.unique'    => 'Este e-mail já está sendo usado por outro cliente.',
+            'whatsapp.unique' => 'Este WhatsApp já está em uso.',
+        ];
+
+        $data = $request->validate($rules, $messages);
         $data = $this->normalize($data);
 
         try {
@@ -142,7 +193,6 @@ class ClienteController extends Controller
     public function destroy(Cliente $cliente)
     {
         $cliente->delete();
-
         return back()->with('success', 'Cliente removido.');
     }
 
@@ -153,14 +203,14 @@ class ClienteController extends Controller
     {
         $digits = fn($v) => $v !== null ? preg_replace('/\D+/', '', (string)$v) : null;
 
-        $data['cpf']      = isset($data['cpf'])      ? $digits($data['cpf']) : null;
-        $data['whatsapp'] = isset($data['whatsapp']) ? $digits($data['whatsapp']) : null;
-        $data['cep']      = isset($data['cep'])      ? $digits($data['cep']) : null;
+        $data['cpf']      = array_key_exists('cpf', $data)      ? $digits($data['cpf']) : null;
+        $data['whatsapp'] = array_key_exists('whatsapp', $data) ? $digits($data['whatsapp']) : null;
+        $data['cep']      = array_key_exists('cep', $data)      ? $digits($data['cep']) : null;
 
-        if (isset($data['email']) && $data['email'] !== null) {
+        if (array_key_exists('email', $data) && $data['email'] !== null) {
             $data['email'] = mb_strtolower(trim($data['email']));
         }
-        if (isset($data['uf']) && $data['uf'] !== null) {
+        if (array_key_exists('uf', $data) && $data['uf'] !== null) {
             $data['uf'] = mb_strtoupper(trim($data['uf']));
         }
 
@@ -179,26 +229,16 @@ class ClienteController extends Controller
     /** Mensagem amigável para violação de unique index */
     private function uniqueErrorMessage(QueryException $e): ?string
     {
-        $sqlState = $e->errorInfo[0] ?? null;
+        $sqlState   = $e->errorInfo[0] ?? null;
         $driverCode = $e->errorInfo[1] ?? null;
 
-        // MySQL/MariaDB duplicate
         if ($sqlState === '23000' && in_array($driverCode, [1062, 1586, 1022])) {
-            $msg = 'Já existe um cliente com ';
             $text = strtolower($e->getMessage());
-
-            if (str_contains($text, 'clientes_cpf_unique') || str_contains($text, 'clientes_cpf')) {
-                return $msg . 'este CPF.';
-            }
-            if (str_contains($text, 'clientes_email_unique') || str_contains($text, 'clientes_email')) {
-                return $msg . 'este e-mail.';
-            }
-            if (str_contains($text, 'clientes_whatsapp_unique') || str_contains($text, 'clientes_whatsapp')) {
-                return $msg . 'este WhatsApp.';
-            }
+            if (str_contains($text, 'clientes_cpf'))      return 'Já existe um cliente com este CPF.';
+            if (str_contains($text, 'clientes_email'))    return 'Este e-mail já está sendo usado por outro cliente.';
+            if (str_contains($text, 'clientes_whatsapp')) return 'Este WhatsApp já está em uso.';
             return 'Registro duplicado. Verifique CPF, e-mail ou WhatsApp.';
         }
-
         return null;
     }
 }
