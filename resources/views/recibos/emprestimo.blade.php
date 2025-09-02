@@ -3,207 +3,225 @@
     $fmtMoeda = fn($v) => 'R$ ' . number_format((float)$v, 2, ',', '.');
     $fmtCPF   = function($cpf) {
         $cpf = preg_replace('/\D+/', '', (string)$cpf ?? '');
-        return strlen($cpf)===11
+        return strlen($cpf) === 11
             ? preg_replace('/(\d{3})(\d{3})(\d{3})(\d{2})/', '$1.$2.$3-$4', $cpf)
             : $cpf;
     };
 
-    // Total de quitação (juros simples sobre principal)
-    $totalQuitacao = (float) $valor;
+    $totalQuitacao = $valor;
     if(!empty($emprestimo->taxa_periodo) && !empty($emprestimo->qtd_parcelas)) {
-        $totalQuitacao = (float) $valor * (1 + (float)$emprestimo->taxa_periodo * (int)$emprestimo->qtd_parcelas);
+        // juros simples sobre principal
+        $totalQuitacao = $valor * (1 + $emprestimo->taxa_periodo * $emprestimo->qtd_parcelas);
     }
-    $totalJuros = max(0, $totalQuitacao - (float)$valor);
 @endphp
 <!doctype html>
 <html lang="pt-BR">
 <head>
 <meta charset="utf-8">
-<title>Recibo de Confissão de Dívida — Empréstimo para {{ $cliente->nome }}</title>
+<title>Recibo de Confissão de Dívida — {{ $cliente->nome }}</title>
 <style>
-  /* Dompdf: 1 página A4, margens compactas */
-  @page { size: A4 portrait; margin: 22px 26px 24px 26px; }
+    @page {
+        size: A4 portrait;
+        margin: 2.5cm; /* Margens mais tradicionais para documentos */
+    }
+    body {
+        font-family: 'Helvetica Neue', Arial, sans-serif;
+        color: #333;
+        margin: 0;
+        font-size: 12px;
+        display: flex;
+        flex-direction: column;
+        min-height: 100vh; /* Ocupa a altura total da página */
+    }
+    .container {
+        width: 100%;
+        margin: 0 auto;
+    }
+    header {
+        text-align: center;
+        margin-bottom: 30px;
+        border-bottom: 1px solid #e0e0e0;
+        padding-bottom: 15px;
+    }
+    h1 {
+        font-size: 22px;
+        margin: 0;
+        font-weight: 500;
+        letter-spacing: 0.5px;
+    }
+    main {
+        flex-grow: 1; /* Faz o conteúdo principal expandir e empurrar o rodapé */
+    }
+    p {
+        line-height: 1.6;
+        margin: 15px 0;
+        text-align: justify;
+    }
+    .muted {
+        color: #777;
+        font-size: 11px;
+    }
 
-  * { box-sizing: border-box; }
-  body {
-    font-family: DejaVu Sans, Arial, Helvetica, sans-serif;
-    color:#111; margin:0;
-  }
+    /* Caixa de informações */
+    .info-box {
+        background-color: #f9f9f9;
+        border: 1px solid #e0e0e0;
+        padding: 18px;
+        border-radius: 8px;
+        margin: 25px 0;
+    }
+    .info-grid {
+        display: grid;
+        grid-template-columns: 1fr 1fr;
+        gap: 12px 24px;
+    }
+    .info-grid div {
+        display: flex;
+        flex-direction: column;
+    }
+    .label {
+        color: #555;
+        font-size: 10px;
+        text-transform: uppercase;
+        margin-bottom: 2px;
+    }
+    .value {
+        font-weight: bold;
+        font-size: 14px;
+    }
 
-  /* Cabeçalho */
-  .header {
-    text-align:center; padding:8px 6px 10px;
-    border-bottom: 1px solid #dcdcdc;
-  }
-  .header h1 {
-    font-size:18px; margin:0; letter-spacing:0.2px;
-  }
-  .subinfo {
-    font-size:11.2px; color:#666; margin-top:4px;
-  }
+    /* Texto da declaração */
+    .declaration-text {
+        margin: 30px 0;
+    }
 
-  /* Quadro resumo (valores) */
-  .summary {
-    margin:10px 0 8px; padding:8px;
-    background:#f6f8ff; border:1px solid #dfe3ff; border-radius:6px;
-  }
-  .summary-row { width:100%; border-collapse:collapse; }
-  .summary-row td {
-    padding:8px 10px; vertical-align:top; border-right:1px dashed #ccd3ff;
-    font-size:12px;
-  }
-  .summary-row td:last-child { border-right:none; }
-  .k { color:#555; font-size:11.5px; display:block; }
-  .v { font-weight:700; font-size:13px; margin-top:2px; }
+    /* Local e Data */
+    .date-location {
+        text-align: right;
+        margin-top: 40px;
+        font-size: 12px;
+    }
 
-  /* Seções de partes (2 colunas) */
-  .panel {
-    border:1px solid #e3e3e3; border-radius:6px; padding:8px 10px; margin:8px 0;
-  }
-  .panel-title {
-    font-weight:700; font-size:12.6px; margin:0 0 6px; color:#333;
-  }
-  .twocol { width:100%; border-collapse:separate; border-spacing:0 4px; }
-  .twocol td { vertical-align:top; font-size:12px; padding:2px 4px; }
-  .label { color:#666; font-size:11.4px; display:inline-block; min-width:98px; }
-  .val { font-weight:600; }
+    /* Assinaturas */
+    .signatures-container {
+        display: flex;
+        justify-content: space-between;
+        gap: 30px;
+        margin-top: 80px;
+    }
+    .signature-block {
+        flex: 1;
+        text-align: center;
+    }
+    .signature-line {
+        border-top: 1px solid #333;
+        padding-top: 8px;
+        font-size: 12px;
+    }
+    .signature-label {
+        font-size: 11px;
+        color: #555;
+    }
 
-  /* Texto principal */
-  p { line-height:1.38; margin:8px 0; font-size:12.2px; }
-  .muted { color:#666; font-size:11.4px; }
-
-  /* Assinaturas */
-  .sigs {
-    margin-top:16px;
-  }
-  .sig-grid { width:100%; border-collapse:separate; border-spacing:18px 0; }
-  .sig-cell { width:33.33%; text-align:center; }
-  .line {
-    margin-top:38px; border-top:1px solid #000; padding-top:4px; font-size:12px;
-  }
-  .sig-sub { color:#666; font-size:11px; margin-top:2px; }
-
-  /* Rodapé */
-  footer {
-    margin-top:10px; text-align:center; font-size:11px; color:#666; padding-top:6px;
-    border-top:1px solid #ededed;
-  }
-
-  /* Evitar quebras em blocos críticos */
-  .no-break { page-break-inside: avoid; }
+    /* Rodapé */
+    footer {
+        margin-top: 40px;
+        text-align: center;
+        font-size: 10px;
+        color: #888;
+        padding-top: 15px;
+        border-top: 1px solid #e0e0e0;
+    }
+    footer a {
+        color: #555;
+        text-decoration: none;
+        font-weight: bold;
+    }
+    footer img {
+        height: 16px;
+        vertical-align: middle;
+        margin-left: 3px;
+    }
 </style>
 </head>
 <body>
+<div class="container">
+    <header>
+        <h1>RECIBO E INSTRUMENTO DE CONFISSÃO DE DÍVIDA</h1>
+    </header>
 
-  <!-- Cabeçalho -->
-  <div class="header no-break">
-    <h1>RECIBO DE CONFISSÃO DE DÍVIDA</h1>
-    <div class="subinfo">
-      Data: {{ $hoje->format('d/m/Y') }}
-      @if(!empty($credor['cidade']) || !empty($credor['uf']))
-        • {{ $credor['cidade'] ?? '' }}{{ !empty($credor['cidade']) && !empty($credor['uf']) ? ' - ' : '' }}{{ $credor['uf'] ?? '' }}
-      @endif
-    </div>
-  </div>
+    <main>
+        <div class="info-box">
+            <div class="info-grid">
+                <div><span class="label">Credor(a):</span> <span class="value">{{ $credor['nome'] }}</span></div>
+                @if(!empty($credor['cpf']))
+                    <div><span class="label">CPF do(a) Credor(a):</span> <span class="value">{{ $fmtCPF($credor['cpf']) }}</span></div>
+                @endif
 
-  <!-- Quadro-resumo (valores principais) -->
-  <div class="summary no-break">
-    <table class="summary-row">
-      <tr>
-        <td>
-          <span class="k">Valor principal</span>
-          <span class="v">{{ $fmtMoeda($valor) }}</span>
-        </td>
-        <td>
-          <span class="k">Juros contratados</span>
-          <span class="v">
-            @if(!empty($emprestimo->taxa_periodo))
-              {{ number_format($emprestimo->taxa_periodo*100,2,',','.') }}% a.m.
-              @if(!empty($emprestimo->qtd_parcelas))
-                • {{ $emprestimo->qtd_parcelas }} parcelas
-              @endif
-            @else
-              —
-            @endif
-          </span>
-        </td>
-        <td>
-          <span class="k">Total para quitação</span>
-          <span class="v">{{ $fmtMoeda($totalQuitacao) }}</span>
-        </td>
-        <td>
-          <span class="k">Juros totais (estimados)</span>
-          <span class="v">{{ $fmtMoeda($totalJuros) }}</span>
-        </td>
-      </tr>
-    </table>
-  </div>
+                <div><span class="label">Devedor(a):</span> <span class="value">{{ $cliente->nome }}</span></div>
+                @if(!empty($cliente->cpf))
+                    <div><span class="label">CPF do(a) Devedor(a):</span> <span class="value">{{ $fmtCPF($cliente->cpf) }}</span></div>
+                @endif
 
-  <!-- Partes -->
-  <div class="panel no-break">
-    <div class="panel-title">Identificação das Partes</div>
-    <table class="twocol">
-      <tr>
-        <td style="width:50%;">
-          <div><span class="label">Credor(a):</span> <span class="val">{{ $credor['nome'] }}</span></div>
-          @if(!empty($credor['cpf']))
-            <div><span class="label">CPF:</span> <span class="val">{{ $fmtCPF($credor['cpf']) }}</span></div>
-          @endif
-        </td>
-        <td style="width:50%;">
-          <div><span class="label">Devedor(a):</span> <span class="val">{{ $cliente->nome }}</span></div>
-          @if(!empty($cliente->cpf))
-            <div><span class="label">CPF:</span> <span class="val">{{ $fmtCPF($cliente->cpf) }}</span></div>
-          @endif
-        </td>
-      </tr>
-    </table>
-  </div>
+                <div><span class="label">Valor Principal:</span> <span class="value">{{ $fmtMoeda($valor) }}</span></div>
+                @if(!empty($emprestimo->taxa_periodo))
+                    <div><span class="label">Juros Contratados:</span>
+                        <span class="value">{{ number_format($emprestimo->taxa_periodo*100,2,',','.') }}% a.m.</span>
+                    </div>
+                @endif
 
-  <!-- Texto principal -->
-  <p class="no-break">
-    Pelo presente instrumento particular de confissão de dívida, {{ $credor['nome'] }}
-    @if(!empty($credor['cpf'])) (CPF {{ $fmtCPF($credor['cpf']) }}) @endif,
-    na qualidade de <strong>Credor(a)</strong>, declara ter emprestado a quantia de
-    <strong>{{ $fmtMoeda($valor) }}</strong> a {{ $cliente->nome }}
-    @if(!empty($cliente->cpf)) (CPF {{ $fmtCPF($cliente->cpf) }}) @endif,
-    doravante <strong>Devedor(a)</strong>. Este(a) reconhece e confessa a dívida,
-    obrigando-se a quitá-la conforme as condições pactuadas, sendo o valor final
-    devido para quitação integral de <strong>{{ $fmtMoeda($totalQuitacao) }}</strong>,
-    estimando-se juros totais de <strong>{{ $fmtMoeda($totalJuros) }}</strong>
-    conforme taxa e quantidade de parcelas indicadas.
-  </p>
+                <div><span class="label">Valor Total para Quitação:</span> <span class="value">{{ $fmtMoeda($totalQuitacao) }}</span></div>
+                <div><span class="label">Data de Emissão:</span> <span class="value">{{ $hoje->format('d/m/Y') }}</span></div>
+            </div>
+        </div>
 
-  <p class="muted no-break">
-    Observação: este recibo é emitido para fins de comprovação de relação creditícia e
-    poderá ser utilizado em conjunto com o cronograma/contrato correspondente.
-  </p>
+        <div class="declaration-text">
+            <p>
+                Pelo presente instrumento particular, <strong>{{ $credor['nome'] }}</strong>,
+                @if(!empty($credor['cpf'])) inscrito(a) no CPF sob o nº {{ $fmtCPF($credor['cpf']) }}, @endif
+                doravante denominado(a) <strong>CREDEOR(A)</strong>, e de outro lado, <strong>{{ $cliente->nome }}</strong>,
+                @if(!empty($cliente->cpf)) inscrito(a) no CPF sob o nº {{ $fmtCPF($cliente->cpf) }}, @endif
+                doravante denominado(a) <strong>DEVEDOR(A)</strong>, declaram para os devidos fins que o(a) DEVEDOR(A) reconhece e confessa ser devedor(a) da quantia de <strong>{{ $fmtMoeda($valor) }}</strong>, recebida a título de empréstimo.
+            </p>
+            <p>
+                A dívida ora confessada, acrescida dos encargos contratuais, totaliza o montante de <strong>{{ $fmtMoeda($totalQuitacao) }}</strong>, valor este que o(a) <strong>DEVEDOR(A)</strong> se compromete a pagar nas condições pactuadas entre as partes.
+            </p>
+            <p class="muted">
+                Este instrumento serve como prova da relação creditícia e poderá ser utilizado para fins legais de cobrança em caso de inadimplemento, em conjunto com o contrato ou cronograma de pagamentos correspondente.
+            </p>
+        </div>
 
-  <!-- Assinaturas -->
-  <div class="sigs no-break">
-    <table class="sig-grid">
-      <tr>
-        <td class="sig-cell">
-          <div class="line">Credor(a): {{ $credor['nome'] }}</div>
-          @if(!empty($credor['cpf'])) <div class="sig-sub">CPF {{ $fmtCPF($credor['cpf']) }}</div> @endif
-        </td>
-        <td class="sig-cell">
-          <div class="line">Devedor(a): {{ $cliente->nome }}</div>
-          @if(!empty($cliente->cpf)) <div class="sig-sub">CPF {{ $fmtCPF($cliente->cpf) }}</div> @endif
-        </td>
-        <td class="sig-cell">
-          <div class="line">Testemunha</div>
-          <div class="sig-sub">Assinatura / CPF</div>
-        </td>
-      </tr>
-    </table>
-  </div>
+        @if(!empty($credor['cidade']) || !empty($credor['uf']))
+            <p class="date-location">
+                {{ $credor['cidade'] ?? '' }}{{ !empty($credor['cidade']) && !empty($credor['uf']) ? ' - ' : '' }}{{ $credor['uf'] ?? '' }},
+                {{ $hoje->translatedFormat('d \d\e F \d\e Y') }}.
+            </p>
+        @endif
 
-  <footer class="no-break">
-    Este recibo foi gerado eletronicamente. Para assinatura digital, utilize o serviço oficial do
-    <a href="https://www.gov.br/pt-br/servicos/assinatura-eletronica" target="_blank" style="text-decoration:none;">
-    <img src="https://barra.sistema.gov.br/v1/assets/govbr.webp" alt="GOV.BR" style="height:18px; vertical-align:middle; margin-left:4px;">
-  </a>
-</footer>
+        <div class="signatures-container">
+            <div class="signature-block">
+                <div class="signature-line">{{ $credor['nome'] }}</div>
+                <div class="signature-label">CREDEOR(A) @if(!empty($credor['cpf'])) <br>CPF {{ $fmtCPF($credor['cpf']) }} @endif</div>
+            </div>
+            <div class="signature-block">
+                <div class="signature-line">{{ $cliente->nome }}</div>
+                <div class="signature-label">DEVEDOR(A) @if(!empty($cliente->cpf)) <br>CPF {{ $fmtCPF($cliente->cpf) }} @endif</div>
+            </div>
+            <div class="signature-block">
+                <div class="signature-line"></div>
+                <div class="signature-label">TESTEMUNHA<br>Nome e CPF</div>
+            </div>
+        </div>
+    </main>
+
+    <footer>
+        Este recibo foi gerado eletronicamente. Para validade legal, deve ser assinado pelas partes.
+        Recomenda-se a assinatura digital via
+        <a href="https://www.gov.br/pt-br/servicos/assinatura-eletronica" target="_blank">
+            Assinador ITI
+            <img src="https://barra.sistema.gov.br/v1/assets/govbr.webp" alt="GOV.BR">
+        </a>
+    </footer>
+</div>
 </body>
 </html>
