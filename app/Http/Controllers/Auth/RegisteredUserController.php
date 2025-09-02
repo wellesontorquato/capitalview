@@ -29,16 +29,25 @@ class RegisteredUserController extends Controller
      */
     public function store(Request $request): RedirectResponse
     {
+        // Normaliza CPF para apenas dígitos antes da validação
+        $request->merge([
+            'cpf' => $request->filled('cpf')
+                ? preg_replace('/\D+/', '', (string) $request->input('cpf'))
+                : null,
+        ]);
+
         $request->validate([
-            'name' => ['required', 'string', 'max:255'],
-            'email' => ['required', 'string', 'lowercase', 'email', 'max:255', 'unique:'.User::class],
+            'name'     => ['required', 'string', 'max:255'],
+            'email'    => ['required', 'string', 'lowercase', 'email', 'max:255', 'unique:' . User::class],
+            'cpf'      => ['nullable', 'digits:11', 'unique:users,cpf'],
             'password' => ['required', 'confirmed', Rules\Password::defaults()],
         ]);
 
         $user = User::create([
-            'name' => $request->name,
-            'email' => $request->email,
-            'password' => Hash::make($request->password),
+            'name'     => $request->string('name'),
+            'email'    => $request->string('email'),
+            'cpf'      => $request->input('cpf'), // mutator do model já garante só dígitos
+            'password' => Hash::make($request->input('password')),
         ]);
 
         event(new Registered($user));

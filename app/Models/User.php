@@ -2,10 +2,10 @@
 
 namespace App\Models;
 
-// use Illuminate\Contracts\Auth\MustVerifyEmail;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Foundation\Auth\User as Authenticatable;
 use Illuminate\Notifications\Notifiable;
+use Illuminate\Database\Eloquent\Casts\Attribute;
 
 class User extends Authenticatable
 {
@@ -21,6 +21,7 @@ class User extends Authenticatable
         'name',
         'email',
         'password',
+        'cpf', // <- novo
     ];
 
     /**
@@ -44,5 +45,16 @@ class User extends Authenticatable
             'email_verified_at' => 'datetime',
             'password' => 'hashed',
         ];
+    }
+
+    /**
+     * Salva sempre somente os dígitos do CPF (ou null).
+     */
+    protected function cpf(): Attribute
+    {
+        return Attribute::make(
+            set: fn ($value) =>
+                filled($value) ? preg_replace('/\D+/', '', (string) $value) : null
+        );
     }
 }
