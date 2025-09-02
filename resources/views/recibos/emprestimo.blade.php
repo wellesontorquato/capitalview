@@ -58,13 +58,13 @@
   /* Assinaturas — mais distância entre blocos e mais espaço para assinar */
   .signatures-container {
     display:flex; justify-content:space-between; column-gap:48px; /* + espaço lateral */
-    margin-top:20px; /* empurra bem para baixo */
+    margin-top:25px; /* empurra bem para baixo */
   }
   .signature-block { flex:1; text-align:center; padding:0 6px; }
 
   /* Área de escrita antes da linha: aumenta o "respiro" para caneta */
   .signature-line {
-    margin-top:50px; /* <-- AQUI criamos a área para escrever antes da linha */
+    margin-top:55px; /* <-- AQUI criamos a área para escrever antes da linha */
     border-top:1px solid #333; padding-top:8px; font-size:12px;
   }
   .signature-label { font-size:11px; color:#555; }
