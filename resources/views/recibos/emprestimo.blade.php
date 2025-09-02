@@ -70,7 +70,7 @@
   .signature-label { font-size:11px; color:#555; }
 
   footer {
-    margin-top:24px; text-align:center; font-size:10px; color:#888;
+    margin-top:30px; text-align:center; font-size:10px; color:#888;
     padding-top:10px; border-top:1px solid #e0e0e0;
   }
   footer a { color:#555; text-decoration:none; font-weight:700; }
