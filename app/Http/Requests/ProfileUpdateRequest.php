@@ -43,7 +43,7 @@ class ProfileUpdateRequest extends FormRequest
                 Rule::unique(User::class, 'email')->ignore($userId),
             ],
             'cpf'   => [
-                'nullable', 'digits:11',
+                'required', 'digits:11',
                 Rule::unique(User::class, 'cpf')->ignore($userId),
             ],
         ];

@@ -39,14 +39,14 @@ class RegisteredUserController extends Controller
         $request->validate([
             'name'     => ['required', 'string', 'max:255'],
             'email'    => ['required', 'string', 'lowercase', 'email', 'max:255', 'unique:' . User::class],
-            'cpf'      => ['nullable', 'digits:11', 'unique:users,cpf'],
+            'cpf' => ['required', 'digits:11', 'unique:users,cpf'],
             'password' => ['required', 'confirmed', Rules\Password::defaults()],
         ]);
 
         $user = User::create([
             'name'     => $request->string('name'),
             'email'    => $request->string('email'),
-            'cpf'      => $request->input('cpf'), // mutator do model já garante só dígitos
+            'cpf'      => $request->input('cpf'),
             'password' => Hash::make($request->input('password')),
         ]);
 

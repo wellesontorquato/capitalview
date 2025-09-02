@@ -31,15 +31,24 @@
         <x-input-error :messages="$errors->get('email')" />
       </div>
 
-      {{-- CPF (opcional, com máscara) --}}
+      {{-- CPF (obrigatório, com máscara) --}}
       <div class="space-y-2">
-        <x-input-label for="cpf" value="CPF (opcional)" class="text-slate-700"/>
-        <x-text-input id="cpf" name="cpf" type="text" :value="old('cpf')" inputmode="numeric" autocomplete="off"
-                      placeholder="000.000.000-00" maxlength="14"
-                      class="block w-full h-12 rounded-2xl border-slate-300 bg-white
-                             text-slate-900 placeholder-slate-400
-                             focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500"/>
-        <p class="text-xs text-slate-500">Aceita com ou sem máscara; salvaremos apenas os dígitos (11).</p>
+        <x-input-label for="cpf" value="CPF" class="text-slate-700"/>
+        <x-text-input
+            id="cpf"
+            name="cpf"
+            type="text"
+            :value="old('cpf')"
+            inputmode="numeric"
+            autocomplete="off"
+            required
+            placeholder="000.000.000-00"
+            maxlength="14"
+            pattern="\d{3}\.\d{3}\.\d{3}-\d{2}"
+            class="block w-full h-12 rounded-2xl border-slate-300 bg-white
+                  text-slate-900 placeholder-slate-400
+                  focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500"
+        />
         <x-input-error :messages="$errors->get('cpf')" />
       </div>
 
@@ -82,19 +91,25 @@
   </div>
 
   {{-- Máscara CPF (vanilla JS) --}}
+  @push('scripts')
   <script>
-    (function () {
-      var input = document.getElementById('cpf');
-      if (!input) return;
-      input.addEventListener('input', function (e) {
-        var v = (e.target.value || '').replace(/\D/g, '').slice(0, 11);
-        var out = '';
-        if (v.length > 0) out = v.substring(0, 3);
-        if (v.length >= 4) out += '.' + v.substring(3, 6);
-        if (v.length >= 7) out += '.' + v.substring(6, 9);
-        if (v.length >= 10) out += '-' + v.substring(9, 11);
-        e.target.value = out;
-      });
-    })();
+  (function () {
+    var input = document.getElementById('cpf');
+    if (!input) return;
+    input.addEventListener('input', function (e) {
+      var v = (e.target.value || '').replace(/\D/g, '').slice(0, 11);
+      var out = '';
+      if (v.length > 0) out = v.substring(0,3);
+      if (v.length >= 4) out += '.' + v.substring(3,6);
+      if (v.length >= 7) out += '.' + v.substring(6,9);
+      if (v.length >= 10) out += '-' + v.substring(9,11);
+      e.target.value = out;
+
+      // feedback de validade HTML5 enquanto digita
+      if (v.length === 11) e.target.setCustomValidity('');
+      else e.target.setCustomValidity('Informe um CPF com 11 dígitos.');
+    });
+  })();
   </script>
+  @endpush
 </x-guest-layout>
