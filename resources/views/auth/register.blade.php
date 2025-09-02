@@ -11,7 +11,7 @@
 
       {{-- Nome --}}
       <div class="space-y-2">
-        <x-input-label for="name" value="Nome" class="text-slate-700"/>
+        <x-input-label for="name" value="Nome completo" class="text-slate-700"/>
         <x-text-input id="name" name="name" type="text" :value="old('name')" required autofocus autocomplete="name"
                       placeholder="Seu nome completo"
                       class="block w-full h-12 rounded-2xl border-slate-300 bg-white
@@ -31,7 +31,7 @@
         <x-input-error :messages="$errors->get('email')" />
       </div>
 
-      {{-- CPF (obrigatório, com máscara) --}}
+      {{-- CPF (obrigatório, máscara opcional) --}}
       <div class="space-y-2">
         <x-input-label for="cpf" value="CPF" class="text-slate-700"/>
         <x-text-input
@@ -44,7 +44,8 @@
             required
             placeholder="000.000.000-00"
             maxlength="14"
-            pattern="\d{3}\.\d{3}\.\d{3}-\d{2}"
+            pattern="^(?:\d{11}|\d{3}\.\d{3}\.\d{3}-\d{2})$"
+            title="Digite 11 dígitos ou no formato 000.000.000-00"
             class="block w-full h-12 rounded-2xl border-slate-300 bg-white
                   text-slate-900 placeholder-slate-400
                   focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500"
@@ -90,8 +91,7 @@
     <p class="mt-8 text-center text-xs text-slate-500">© {{ date('Y') }} — Todos os direitos reservados.</p>
   </div>
 
-  {{-- Máscara CPF (vanilla JS) --}}
-  @push('scripts')
+  {{-- Máscara CPF (inline, sem depender de @push/@stack) --}}
   <script>
   (function () {
     var input = document.getElementById('cpf');
@@ -105,11 +105,10 @@
       if (v.length >= 10) out += '-' + v.substring(9,11);
       e.target.value = out;
 
-      // feedback de validade HTML5 enquanto digita
+      // HTML5 validity: válido somente com 11 dígitos (mascarado ou não)
       if (v.length === 11) e.target.setCustomValidity('');
       else e.target.setCustomValidity('Informe um CPF com 11 dígitos.');
     });
   })();
   </script>
-  @endpush
 </x-guest-layout>
