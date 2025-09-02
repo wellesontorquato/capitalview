@@ -64,7 +64,7 @@
 
   /* Área de escrita antes da linha: aumenta o "respiro" para caneta */
   .signature-line {
-    margin-top:88px; /* <-- AQUI criamos a área para escrever antes da linha */
+    margin-top:40px; /* <-- AQUI criamos a área para escrever antes da linha */
     border-top:1px solid #333; padding-top:8px; font-size:12px;
   }
   .signature-label { font-size:11px; color:#555; }
@@ -159,12 +159,9 @@
   </main>
 
   <footer>
-        Este recibo foi gerado eletronicamente. Para validade legal, deve ser assinado pelas partes.
-        Recomenda-se a assinatura digital via
-        <a href="https://www.gov.br/pt-br/servicos/assinatura-eletronica" target="_blank">
-            Assinador ITI
-            <img src="https://barra.sistema.gov.br/v1/assets/govbr.webp" alt="GOV.BR">
-        </a>
+    Este recibo foi gerado eletronicamente. Para validade legal, deve ser assinado pelas partes.
+    Recomenda-se a assinatura digital via
+    <a href="https://www.gov.br/pt-br/servicos/assinatura-eletronica" target="_blank">gov.br (Assinatura Eletrônica)</a>.
   </footer>
 </div>
 </body>
