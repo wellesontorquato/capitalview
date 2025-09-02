@@ -58,7 +58,7 @@
   /* Assinaturas — mais distância entre blocos e mais espaço para assinar */
   .signatures-container {
     display:flex; justify-content:space-between; column-gap:48px; /* + espaço lateral */
-    margin-top:68px; /* empurra bem para baixo */
+    margin-top:40px; /* empurra bem para baixo */
   }
   .signature-block { flex:1; text-align:center; padding:0 6px; }
 
@@ -149,11 +149,6 @@
           DEVEDOR(A)
           @if(!empty($cliente->cpf)) <br>CPF {{ $fmtCPF($cliente->cpf) }} @endif
         </div>
-      </div>
-
-      <div class="signature-block">
-        <div class="signature-line">&nbsp;</div>
-        <div class="signature-label">TESTEMUNHA<br>Nome e CPF</div>
       </div>
     </div>
   </main>
