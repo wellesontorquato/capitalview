@@ -106,8 +106,8 @@
     .signatures-container {
         display: flex;
         justify-content: space-between;
-        gap: 30px;
-        margin-top: 80px;
+        gap: 50px; /* AUMENTADO: Mais espaço horizontal entre as assinaturas */
+        margin-top: 100px; /* AUMENTADO: Mais espaço vertical acima das assinaturas */
     }
     .signature-block {
         flex: 1;
@@ -121,6 +121,7 @@
     .signature-label {
         font-size: 11px;
         color: #555;
+        line-height: 1.4; /* ADICIONADO: Melhora o espaçamento do texto abaixo da linha */
     }
 
     /* Rodapé */
