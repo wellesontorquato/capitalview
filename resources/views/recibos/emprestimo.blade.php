@@ -117,7 +117,7 @@
         ser devedor(a) da quantia de <strong>{{ $fmtMoeda($valor) }}</strong>, recebida a título de empréstimo.
       </p>
       <p>
-        A dívida ora confessada, acrescida dos encargos contratuais, totaliza o montante de
+        A dívida ora confessada, acrescida dos encargos contratuais, totaliza o valor montante de
         <strong>{{ $fmtMoeda($totalQuitacao) }}</strong>, valor este que o(a) <strong>DEVEDOR(A)</strong> se compromete a pagar nas
         condições pactuadas entre as partes.
       </p>
