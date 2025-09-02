@@ -121,10 +121,6 @@
         <strong>{{ $fmtMoeda($totalQuitacao) }}</strong>, valor este que o(a) <strong>DEVEDOR(A)</strong> se compromete a pagar nas
         condições pactuadas entre as partes.
       </p>
-      <p class="muted">
-        Este instrumento serve como prova da relação creditícia e poderá ser utilizado para fins legais de cobrança em caso de
-        inadimplemento, em conjunto com o contrato ou cronograma de pagamentos correspondente.
-      </p>
     </div>
 
     @if(!empty($credor['cidade']) || !empty($credor['uf']))
