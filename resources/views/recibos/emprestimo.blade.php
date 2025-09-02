@@ -58,7 +58,7 @@
   /* Assinaturas — mais distância entre blocos e mais espaço para assinar */
   .signatures-container {
     display:flex; justify-content:space-between; column-gap:48px; /* + espaço lateral */
-    margin-top:25px; /* empurra bem para baixo */
+    margin-top:20px; /* empurra bem para baixo */
   }
   .signature-block { flex:1; text-align:center; padding:0 6px; }
 
