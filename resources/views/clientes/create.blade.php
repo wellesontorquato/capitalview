@@ -200,7 +200,6 @@
         btn.dataset._label ??= btn.textContent;
         btn.textContent = yes ? 'Salvando…' : btn.dataset._label;
         }
-        // Não desabilite inputs/selects (senão não enviam). Só um feedback visual:
         form.classList.toggle('opacity-50', !!yes);
     };
 
@@ -229,48 +228,69 @@
         if (e.key === 'Enter' && e.target.tagName !== 'TEXTAREA') e.preventDefault();
     });
 
-    // -------------------- máscaras --------------------
-    function keepCaret(el, cb) {
-        const s = el.selectionStart, e = el.selectionEnd;
-        cb();
-        try { el.setSelectionRange(s, e); } catch {}
+    // -------------------- MÁSCARAS (caret estável) --------------------
+    // Formatadores puros
+    function formatCPF(d){
+        d = onlyDigits(d).slice(0,11);
+        if (d.length <= 3)  return d;
+        if (d.length <= 6)  return `${d.slice(0,3)}.${d.slice(3)}`;
+        if (d.length <= 9)  return `${d.slice(0,3)}.${d.slice(3,6)}.${d.slice(6)}`;
+        return `${d.slice(0,3)}.${d.slice(3,6)}.${d.slice(6,9)}-${d.slice(9)}`;
     }
-    function maskCPF(el){
-        keepCaret(el, () => {
-        el.value = onlyDigits(el.value).slice(0,11)
-            .replace(/(\d{3})(\d)/, '$1.$2')
-            .replace(/(\d{3})(\d)/, '$1.$2')
-            .replace(/(\d{3})(\d{1,2})$/, '$1-$2');
-        });
+    function formatCEP(d){
+        d = onlyDigits(d).slice(0,8);
+        return (d.length > 5) ? `${d.slice(0,5)}-${d.slice(5)}` : d;
     }
-    function maskCEP(el){
-        keepCaret(el, () => {
-        el.value = onlyDigits(el.value).slice(0,8)
-            .replace(/(\d{5})(\d)/, '$1-$2');
-        });
+    function formatWhats(d){
+        d = onlyDigits(d).slice(0,11);
+        const dd = d.slice(0,2);
+        if (d.length <= 10) {
+        const b = d.slice(2,6), c = d.slice(6,10);
+        return (dd ? `(${dd}) ` : '') + b + (c ? `-${c}` : '');
+        }
+        const b = d.slice(2,7), c = d.slice(7,11);
+        return (dd ? `(${dd}) ` : '') + b + (c ? `-${c}` : '');
     }
-    function maskWhats(el){
-        keepCaret(el, () => {
-        const d = onlyDigits(el.value).slice(0,11);
-        el.value = (d.length <= 10)
-            ? d.replace(/(\d{0,2})(\d{0,4})(\d{0,4})/, (_,a,b,c)=>(a?`(${a}`:'')+(a?') ':'')+(b||'')+(c?'-'+c:''))
-            : d.replace(/(\d{0,2})(\d{0,5})(\d{0,4})/, (_,a,b,c)=>(a?`(${a}`:'')+(a?') ':'')+(b||'')+(c?'-'+c:''));
-        el.value = el.value.trim();
-        });
-    }
-    $$('.js-mask-cpf').forEach(el => { el.addEventListener('input', () => maskCPF(el)); maskCPF(el); });
-    $$('.js-mask-cep').forEach(el => { el.addEventListener('input', () => maskCEP(el)); maskCEP(el); });
-    $$('.js-mask-whatsapp').forEach(el => { el.addEventListener('input', () => maskWhats(el)); maskWhats(el); });
 
-    // paste só com dígitos
-    $$('.js-mask-cpf, .js-mask-cep, .js-mask-whatsapp').forEach(el => {
+    // Remáscara preservando caret pelo nº de dígitos antes do cursor
+    function remaskWithCaret(el, formatter) {
+        const prev = el.value || '';
+        const sel  = el.selectionStart ?? prev.length;
+        const digitsBefore = onlyDigits(prev.slice(0, sel)).length;
+
+        const masked = formatter(prev);
+        el.value = masked;
+
+        // posiciona após o mesmo número de dígitos
+        let pos = 0, seen = 0;
+        while (pos < masked.length && seen < digitsBefore) {
+        if (/\d/.test(masked.charAt(pos))) seen++;
+        pos++;
+        }
+        try { el.setSelectionRange(pos, pos); } catch {}
+    }
+
+    function bindMask(selector, formatter) {
+        $$(selector).forEach(el => {
+        const onInput = () => remaskWithCaret(el, formatter);
+        el.addEventListener('input', onInput);
+        // Aplica ao carregar (valor de old())
+        onInput();
+
+        // paste: cola só dígitos e remáscara
         el.addEventListener('paste', (e) => {
-        e.preventDefault();
-        const t = (e.clipboardData || window.clipboardData).getData('text');
-        el.value = onlyDigits(t);
-        el.dispatchEvent(new Event('input'));
+            e.preventDefault();
+            const t = (e.clipboardData || window.clipboardData).getData('text') || '';
+            el.value = onlyDigits(t);
+            onInput();
         });
-    });
+        });
+    }
+
+    // Liga as máscaras
+    bindMask('.js-mask-cpf',      formatCPF);
+    bindMask('.js-mask-cep',      formatCEP);
+    bindMask('.js-mask-whatsapp', formatWhats);
 
     // -------------------- ViaCEP --------------------
     const cepInput = $('.js-cep');
