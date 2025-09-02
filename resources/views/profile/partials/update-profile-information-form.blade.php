@@ -18,15 +18,15 @@
         @method('patch')
 
         <div>
-            <x-input-label for="name" value="Nome" />
+            <x-input-label for="name" value="Nome completo(Obrigatório para emissão de recibo)" />
             <x-text-input id="name" name="name" type="text" class="mt-1 block w-full"
                 :value="old('name', $user->name)" required autofocus autocomplete="name" />
             <x-input-error class="mt-2" :messages="$errors->get('name')" />
         </div>
 
-        {{-- CPF (opcional) --}}
+        {{-- CPF --}}
         <div>
-            <x-input-label for="cpf" value="CPF (opcional)" />
+            <x-input-label for="cpf" value="CPF(Obrigatório para emissão de recibo)" />
             <x-text-input
                 id="cpf"
                 name="cpf"
