@@ -141,6 +141,12 @@
 
                                 $prox = $emprestimo->parcelas->firstWhere('numero', $p->numero + 1);
                                 $isUltima = ((int)$p->numero === $maxNumero);
+
+                                // ✅ defaults seguros p/ edição (caso exista $ultimoPg)
+                                $ultimoValor = (float) ($ultimoPg?->valor ?? $totalPago ?? 0);
+                                $ultimoPagoEm = $ultimoPg?->pago_em
+                                    ? \Illuminate\Support\Carbon::parse($ultimoPg->pago_em)->format('Y-m-d')
+                                    : now()->format('Y-m-d');
                             @endphp
 
                             <div class="card card-p" x-data="{openPay:false, openEdit:false}">
@@ -181,8 +187,8 @@
                                                 x-text="openPay ? 'Fechar' : 'Registrar pagamento'"></button>
                                     @endif
 
-                                    {{-- Editar quando já tem pagamento (ou está paga) --}}
-                                    @if($jaTemPagamento || $p->status === 'paga')
+                                    {{-- ✅ Editar só quando existe pagamento registrado --}}
+                                    @if($ultimoPg)
                                         <button class="btn btn-secondary w-full sm:w-auto"
                                                 @click="openEdit=!openEdit; openPay=false"
                                                 x-text="openEdit ? 'Fechar' : 'Editar'"></button>
@@ -249,7 +255,6 @@
 
                                         {{-- PARCIAL: mover restante/aplicar juros --}}
                                         @if($isUltima)
-                                            {{-- Última parcela: não mostra select; força criar NOVA --}}
                                             <input type="hidden" name="destino_parcela_id" value="__nova__">
                                             <p class="text-xs text-slate-500 sm:col-span-6">
                                                 Como esta é a última parcela, o restante será movido automaticamente para uma
@@ -277,7 +282,6 @@
                                             </div>
                                         @endif
 
-                                        {{-- JUROS: aviso --}}
                                         <p class="text-xs text-slate-500 sm:col-span-6" x-show="isJuros" x-cloak>
                                             Ao pagar <strong>só os juros</strong>, a amortização desta parcela será empurrada automaticamente
                                             para uma <strong>nova parcela</strong> no fim do cronograma.
@@ -290,14 +294,19 @@
                                 </div>
                                 @endif
 
-                                {{-- Form: Editar pagamento (inline) --}}
-                                @if($jaTemPagamento || $p->status === 'paga')
+                                {{-- ✅ Form: Editar pagamento (inline) --}}
+                                @if($ultimoPg)
                                 <div class="mt-3" x-show="openEdit" x-collapse x-cloak>
                                     @php
-                                        // Detecta classes de quitação
-                                        $isJurosOnly   = abs((float)$p->valor_amortizacao) <= 0.01; // quitada só em juros
+                                        $isJurosOnly   = abs((float)$p->valor_amortizacao) <= 0.01;
                                         $isParcialPago = ($p->status === 'paga') && ($totalPago > 0.009) && !$aprox((float)$totalPago, (float)$parcelaAjustada);
                                         $editClass     = $isParcialPago ? 'parcial' : ($isJurosOnly ? 'juros' : 'total');
+
+                                        $ultimoValor = (float) ($ultimoPg?->valor ?? $totalPago ?? 0);
+                                        $ultimoPagoEm = $ultimoPg?->pago_em
+                                            ? \Illuminate\Support\Carbon::parse($ultimoPg->pago_em)->format('Y-m-d')
+                                            : now()->format('Y-m-d');
+                                        $ultimoBanco = $ultimoPg?->banco;
                                     @endphp
 
                                     <form method="POST" action="{{ route('parcelas.update', $p) }}"
@@ -307,7 +316,6 @@
 
                                         <input type="hidden" name="edit_class" value="{{ $editClass }}">
 
-                                        {{-- Valor: liberado p/ juros ou total; travado se "parcial" --}}
                                         <div class="sm:col-span-2">
                                             <label class="block text-xs mb-1">
                                                 @if($isParcialPago)
@@ -321,7 +329,7 @@
                                                 step="0.01"
                                                 min="0.01"
                                                 name="valor"
-                                                value="{{ number_format((float)$ultimoPg->valor, 2, '.', '') }}"
+                                                value="{{ number_format($ultimoValor, 2, '.', '') }}"
                                                 class="border rounded px-3 py-2 w-full {{ $isParcialPago ? 'bg-slate-50' : '' }}"
                                                 @if($isParcialPago) readonly @endif
                                                 required
@@ -338,24 +346,23 @@
                                         <div class="sm:col-span-2">
                                             <label class="block text-xs mb-1">Pago em</label>
                                             <input type="date" name="pago_em"
-                                                value="{{ \Illuminate\Support\Carbon::parse($ultimoPg->pago_em)->format('Y-m-d') }}"
+                                                value="{{ $ultimoPagoEm }}"
                                                 class="border rounded px-3 py-2 w-full" required>
                                         </div>
 
-                                        {{-- BANCO --}}
                                         <fieldset class="sm:col-span-2">
                                             <legend class="block text-xs mb-1">Banco</legend>
                                             <div class="flex flex-wrap gap-3 text-sm">
                                                 <label class="inline-flex items-center gap-2">
-                                                    <input type="radio" name="banco" value="CAIXA" {{ $ultimoPg->banco==='CAIXA'?'checked':'' }} required>
+                                                    <input type="radio" name="banco" value="CAIXA" {{ $ultimoBanco==='CAIXA'?'checked':'' }} required>
                                                     Caixa Econômica
                                                 </label>
                                                 <label class="inline-flex items-center gap-2">
-                                                    <input type="radio" name="banco" value="C6" {{ $ultimoPg->banco==='C6'?'checked':'' }}>
+                                                    <input type="radio" name="banco" value="C6" {{ $ultimoBanco==='C6'?'checked':'' }}>
                                                     C6
                                                 </label>
                                                 <label class="inline-flex items-center gap-2">
-                                                    <input type="radio" name="banco" value="BRADESCO" {{ $ultimoPg->banco==='BRADESCO'?'checked':'' }}>
+                                                    <input type="radio" name="banco" value="BRADESCO" {{ $ultimoBanco==='BRADESCO'?'checked':'' }}>
                                                     Bradesco
                                                 </label>
                                             </div>
@@ -397,7 +404,7 @@
                                     $ultimoPg = $p->pagamentos->sortByDesc('created_at')->first();
                                     $ultimoBanco = $ultimoPg?->banco;
                                     $ultimoBancoLabel = $bancoLabel($ultimoBanco);
-                                    
+
                                     $modoPg = $ultimoPg?->modo;
                                     $badge  = $badgeInfo($p, $parcelaAjustada, $totalPago, $modoPg);
 
@@ -410,8 +417,12 @@
 
                                     $jaTemPagamento = ($totalPago ?? 0) > 0.009;
 
-                                    $prox = $emprestimo->parcelas->firstWhere('numero', $p->numero + 1);
                                     $isUltima = ((int)$p->numero === $maxNumero);
+
+                                    $ultimoValor = (float) ($ultimoPg?->valor ?? $totalPago ?? 0);
+                                    $ultimoPagoEm = $ultimoPg?->pago_em
+                                        ? \Illuminate\Support\Carbon::parse($ultimoPg->pago_em)->format('Y-m-d')
+                                        : now()->format('Y-m-d');
                                 @endphp
 
                                 <tbody x-data="{openPay:false, openEdit:false}">
@@ -439,20 +450,18 @@
                                         <td class="td align-middle">{{ $moeda($p->saldo_devedor) }}</td>
                                         <td class="td text-right">
                                             <div class="inline-flex gap-2">
-                                                {{-- WhatsApp só enquanto não há pagamento e parcela não está paga --}}
                                                 @if($wa && !$jaTemPagamento && $p->status !== 'paga')
                                                     <a class="btn btn-ghost" target="_blank" rel="noopener" href="{{ $wa }}">WhatsApp</a>
                                                 @endif
 
-                                                {{-- Registrar pagamento enquanto não há pagamento e ainda não está paga --}}
                                                 @if(!$jaTemPagamento && $p->status !== 'paga')
                                                     <button class="btn btn-primary"
                                                             @click="openPay=!openPay; openEdit=false"
                                                             x-text="openPay ? 'Fechar' : 'Registrar pagamento'"></button>
                                                 @endif
 
-                                                {{-- Editar quando já tem pagamento (ou paga) --}}
-                                                @if($jaTemPagamento || $p->status === 'paga')
+                                                {{-- ✅ Editar só quando existe pagamento registrado --}}
+                                                @if($ultimoPg)
                                                     <button class="btn btn-secondary"
                                                             @click="openEdit=!openEdit; openPay=false"
                                                             x-text="openEdit ? 'Fechar' : 'Editar'"></button>
@@ -461,7 +470,6 @@
                                         </td>
                                     </tr>
 
-                                    {{-- Form: Registrar pagamento --}}
                                     @if(!$jaTemPagamento && $p->status !== 'paga')
                                     <tr x-show="openPay" x-collapse x-cloak>
                                         <td class="td" colspan="7">
@@ -501,7 +509,6 @@
                                                     <input type="date" name="pago_em" class="border rounded px-3 py-2 w-full" value="{{ now()->format('Y-m-d') }}">
                                                 </div>
 
-                                                {{-- BANCO --}}
                                                 <fieldset class="col-span-2">
                                                     <legend class="block text-xs mb-1">Banco do pagamento</legend>
                                                     <div class="flex flex-wrap gap-3 text-sm">
@@ -520,9 +527,7 @@
                                                     </div>
                                                 </fieldset>
 
-                                                {{-- PARCIAL: mover restante/aplicar juros --}}
                                                 @if($isUltima)
-                                                    {{-- Última parcela: não mostra select; força criar NOVA --}}
                                                     <input type="hidden" name="destino_parcela_id" value="__nova__">
                                                     <p class="text-xs text-slate-500 col-span-6">
                                                         Como esta é a última parcela, o restante será movido automaticamente para uma
@@ -550,7 +555,6 @@
                                                     </div>
                                                 @endif
 
-                                                {{-- JUROS: aviso --}}
                                                 <p class="text-xs text-slate-500 col-span-6" x-show="isJuros" x-cloak>
                                                     Ao pagar <strong>só os juros</strong>, a amortização desta parcela será empurrada automaticamente
                                                     para uma <strong>nova parcela</strong> no fim do cronograma.
@@ -564,14 +568,15 @@
                                     </tr>
                                     @endif
 
-                                    {{-- Form: Editar pagamento (inline) --}}
-                                    @if($jaTemPagamento || $p->status === 'paga')
+                                    {{-- ✅ Form: Editar pagamento --}}
+                                    @if($ultimoPg)
                                     <tr x-show="openEdit" x-collapse x-cloak>
                                         <td class="td" colspan="7">
                                             @php
                                                 $isJurosOnly   = abs((float)$p->valor_amortizacao) <= 0.01;
                                                 $isParcialPago = ($p->status === 'paga') && ($totalPago > 0.009) && !$aprox((float)$totalPago, (float)$parcelaAjustada);
                                                 $editClass     = $isParcialPago ? 'parcial' : ($isJurosOnly ? 'juros' : 'total');
+                                                $ultimoBanco = $ultimoPg?->banco;
                                             @endphp
 
                                             <form method="POST" action="{{ route('parcelas.update', $p) }}"
@@ -581,7 +586,6 @@
 
                                                 <input type="hidden" name="edit_class" value="{{ $editClass }}">
 
-                                                {{-- Valor: liberado p/ juros ou total; travado se "parcial" --}}
                                                 <div class="col-span-2">
                                                     <label class="block text-xs mb-1">
                                                         @if($isParcialPago)
@@ -595,7 +599,7 @@
                                                         step="0.01"
                                                         min="0.01"
                                                         name="valor"
-                                                        value="{{ number_format((float)$ultimoPg->valor, 2, '.', '') }}"
+                                                        value="{{ number_format($ultimoValor, 2, '.', '') }}"
                                                         class="border rounded px-3 py-2 w-full {{ $isParcialPago ? 'bg-slate-50' : '' }}"
                                                         @if($isParcialPago) readonly @endif
                                                         required
@@ -612,24 +616,23 @@
                                                 <div>
                                                     <label class="block text-xs mb-1">Pago em</label>
                                                     <input type="date" name="pago_em"
-                                                        value="{{ \Illuminate\Support\Carbon::parse($ultimoPg->pago_em)->format('Y-m-d') }}"
+                                                        value="{{ $ultimoPagoEm }}"
                                                         class="border rounded px-3 py-2 w-full" required>
                                                 </div>
 
-                                                {{-- BANCO --}}
                                                 <fieldset class="col-span-2">
                                                     <legend class="block text-xs mb-1">Banco</legend>
                                                     <div class="flex flex-wrap gap-3 text-sm">
                                                         <label class="inline-flex items-center gap-2">
-                                                            <input type="radio" name="banco" value="CAIXA" {{ $ultimoPg->banco==='CAIXA'?'checked':'' }} required>
+                                                            <input type="radio" name="banco" value="CAIXA" {{ $ultimoBanco==='CAIXA'?'checked':'' }} required>
                                                             Caixa Econômica
                                                         </label>
                                                         <label class="inline-flex items-center gap-2">
-                                                            <input type="radio" name="banco" value="C6" {{ $ultimoPg->banco==='C6'?'checked':'' }}>
+                                                            <input type="radio" name="banco" value="C6" {{ $ultimoBanco==='C6'?'checked':'' }}>
                                                             C6
                                                         </label>
                                                         <label class="inline-flex items-center gap-2">
-                                                            <input type="radio" name="banco" value="BRADESCO" {{ $ultimoPg->banco==='BRADESCO'?'checked':'' }}>
+                                                            <input type="radio" name="banco" value="BRADESCO" {{ $ultimoBanco==='BRADESCO'?'checked':'' }}>
                                                             Bradesco
                                                         </label>
                                                     </div>
@@ -686,7 +689,6 @@
       const form = document.getElementById('form-quitar');
       if (!btn || !form) return;
 
-      // hidden inputs para enviar decisão
       function ensureHidden(name, def='') {
         let el = form.querySelector(`input[name="${name}"]`);
         if (!el) {
@@ -713,7 +715,7 @@
           if (!res.ok) throw new Error('Falha ao calcular');
           const q = await res.json();
 
-          let desconto = 0; // %
+          let desconto = 0;
           let modo = 'ACORDADO';
 
           const html = `
@@ -735,7 +737,6 @@
             </style>
 
             <div class="sw-box">
-
               <label class="sw-card">
                 <input type="radio" name="sw-modo" value="ACORDADO" checked>
                 <span class="sw-strong">Quitar pelo acordado (restante contratual)</span>
@@ -784,7 +785,6 @@
                   </div>
                 </div>
               </div>
-
             </div>
           `;
 
@@ -816,7 +816,6 @@
               rads.forEach(r => r.addEventListener('change', () => { modo = r.value; }));
               pagoEmEl?.addEventListener('change', () => { hPagoEm.value = pagoEmEl.value; });
 
-              // atualiza hidden banco ao selecionar
               bancos.forEach(b => b.addEventListener('change', (ev) => {
                 hBanco.value = ev.target.value;
               }));
