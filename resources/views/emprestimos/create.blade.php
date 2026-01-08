@@ -164,6 +164,13 @@
                                 <span>1ª parcela:</span>
                                 <span class="font-semibold" id="b-parcela-1">—</span>
                             </div>
+
+                            {{-- ✅ NOVO: demais parcelas "típica" (mês 2) --}}
+                            <div class="flex justify-between hidden" id="row-b-demais">
+                                <span>Demais parcelas:</span>
+                                <span class="font-semibold" id="b-parcela-demais">—</span>
+                            </div>
+
                             <div class="flex justify-between">
                                 <span>Última parcela:</span>
                                 <span class="font-semibold" id="b-parcela-n">—</span>
@@ -214,6 +221,8 @@
             const boxB = document.getElementById('box-b');
             const bParc1 = document.getElementById('b-parcela-1');
             const bParcN = document.getElementById('b-parcela-n');
+            const bParcDemais = document.getElementById('b-parcela-demais');
+            const rowBDemais = document.getElementById('row-b-demais');
             const bJuros = document.getElementById('b-juros');
             const bTotal = document.getElementById('b-total');
 
@@ -228,18 +237,15 @@
 
             function round2(x) { return Math.round((x + Number.EPSILON) * 100) / 100; }
 
-            // dias entre hoje e a data informada (inteiro, truncado p/ baixo)
             function diffDaysFromToday(dateStr) {
                 if (!dateStr) return NaN;
-                const due = new Date(dateStr + 'T12:00:00'); // meio-dia evita problemas de fuso
+                const due = new Date(dateStr + 'T12:00:00');
                 const now = new Date();
                 const start = new Date(now.getFullYear(), now.getMonth(), now.getDate(), 12, 0, 0);
                 const ms = due - start;
                 return Math.floor(ms / 86400000);
             }
 
-            // retorna fator de ajuste (ratio) para os juros da 1ª parcela
-            // se marcado "proporcional" e 0<dias<30 => dias/30; caso contrário 1
             function firstInterestRatio() {
                 const proporcional = elRadioProp?.checked ?? true;
                 const dias = diffDaysFromToday(elDue?.value);
@@ -277,17 +283,15 @@
                 const amort = pv / n;
 
                 if (tipo === 'FIXED_ON_PRINCIPAL') {
-                    // Opção A: juros fixos sobre o principal
                     const jurosMes = i * pv;
 
-                    const parcelaNormal = round2(amort + jurosMes);        // meses 2..n
-                    const jurosPrimeiro = round2(jurosMes * ratio);        // 1º mês proporcional
-                    const parcelaPrimeira = round2(amort + jurosPrimeiro); // 1ª parcela
+                    const parcelaNormal = round2(amort + jurosMes);
+                    const jurosPrimeiro = round2(jurosMes * ratio);
+                    const parcelaPrimeira = round2(amort + jurosPrimeiro);
 
                     const jurosTotais = round2(jurosPrimeiro + jurosMes * (n - 1));
                     const totalPago   = round2(pv + jurosTotais);
 
-                    // Mostra as duas quando houver proporcionalidade (<30 dias)
                     if (ratio < 1) {
                         aParcela.textContent = `1ª: ${fmtBRL(parcelaPrimeira)} | demais: ${fmtBRL(parcelaNormal)}`;
                         aObs.textContent = 'Obs.: 1ª parcela proporcional por dias/30; demais permanecem fixas.';
@@ -295,6 +299,7 @@
                         aParcela.textContent = fmtBRL(parcelaNormal);
                         aObs.textContent = '';
                     }
+
                     aJuros.textContent   = fmtBRL(jurosTotais);
                     aTotal.textContent   = fmtBRL(totalPago);
 
@@ -302,22 +307,30 @@
                     show(boxB, false);
                 } else {
                     // Opção B: amortização fixa + juros sobre saldo
-                    // 1ª parcela proporcional nos juros
                     const juros1 = i * pv * ratio;
                     const primeiraParcela = round2(amort + juros1);
 
-                    // última parcela segue fórmula padrão (não é afetada pelo ratio)
+                    // ✅ "Demais parcelas" típica = parcela do mês 2:
+                    // amort + juros sobre (pv - amort). Não usa ratio.
+                    const saldoAposPrimeiraAmort = pv - amort;
+                    const demaisParcelaTipica = round2(amort + i * saldoAposPrimeiraAmort);
+
                     const saldoPenultimo = pv - amort * (n - 1);
                     const ultimaParcela  = round2(amort + i * saldoPenultimo);
 
-                    // Juros totais base da B: i * pv * (n + 1) / 2
-                    // Ajuste pela proporcionalidade do 1º mês: subtrai (1 - ratio) * i * pv
                     const jurosTotaisBase = i * pv * (n + 1) / 2;
                     const jurosTotais = round2(jurosTotaisBase - (1 - ratio) * i * pv);
                     const totalPago   = round2(pv + jurosTotais);
 
                     bParc1.textContent = fmtBRL(primeiraParcela);
                     bParcN.textContent = fmtBRL(ultimaParcela);
+
+                    // mostra "Demais" só quando existe mês 2 (n >= 3)
+                    show(rowBDemais, isFinite(n) && n >= 3);
+                    if (isFinite(n) && n >= 3) {
+                        bParcDemais.textContent = fmtBRL(demaisParcelaTipica);
+                    }
+
                     bJuros.textContent = fmtBRL(jurosTotais);
                     bTotal.textContent = fmtBRL(totalPago);
 
@@ -336,7 +349,6 @@
                 elRadioInt.addEventListener(evt, calcPreview);
             });
 
-            // inicial
             calcPreview();
         })();
     </script>
