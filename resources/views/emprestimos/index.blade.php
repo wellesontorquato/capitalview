@@ -101,7 +101,10 @@
     {{-- MOBILE (cards) --}}
     <div class="grid sm:hidden gap-3">
         @forelse($emprestimos as $e)
-            @php $temPagamentos = ($e->pagamentos_count ?? 0) > 0; @endphp
+            @php
+                $temPagamentos = ($e->pagamentos_count ?? 0) > 0;
+                $isQuitado = (($e->abertas_count ?? 0) <= 0) && (($e->vencidas_count ?? 0) <= 0);
+            @endphp
             <div class="k-card" x-data="menu()" x-init="init()">
                 <div class="flex items-start justify-between gap-3">
                     <div>
@@ -122,13 +125,19 @@
                 </div>
 
                 <div class="mt-3 flex items-center justify-between">
-                    <a class="btn btn-primary" href="{{ route('emprestimos.show',$e) }}">Abrir</a>
+                    {{-- ✅ Abrir com confirmação se quitado --}}
+                    <a
+                        class="btn btn-primary js-open-loan"
+                        href="{{ route('emprestimos.show',$e) }}"
+                        data-status="{{ $isQuitado ? 'quitado' : 'aberto' }}"
+                        data-loan-id="{{ $e->id }}"
+                        data-cliente="{{ e($e->cliente?->nome ?? '') }}"
+                    >Abrir</a>
 
                     <div x-data="menu()">
                         <button @click="toggle($event)" class="btn btn-ghost px-3" aria-label="Mais ações">⋯</button>
 
                         <template x-teleport="body">
-                            <!-- Overlay: fecha no clique fora e no ESC -->
                             <div
                                 x-show="open"
                                 x-transition.opacity.duration.100ms
@@ -137,11 +146,9 @@
                                 class="fixed inset-0 z-[60] bg-black/0"
                                 style="pointer-events:auto"
                             >
-                                <!-- Painel (posicionado via JS) -->
                                 <div class="menu-panel z-[70]" :style="style" @click.stop>
                                     <a class="menu-item" href="{{ route('emprestimos.edit',$e) }}">Editar</a>
 
-                                    {{-- Exportações INDIVIDUAIS (micro — parcelas) --}}
                                     <a class="menu-item" href="{{ route('emprestimos.show',$e) }}?export=parcelas-pdf">PDF</a>
                                     <a class="menu-item" href="{{ route('emprestimos.show',$e) }}?export=parcelas-csv">Excel</a>
 
@@ -186,7 +193,10 @@
                     </thead>
                     <tbody>
                     @forelse($emprestimos as $e)
-                        @php $temPagamentos = ($e->pagamentos_count ?? 0) > 0; @endphp
+                        @php
+                            $temPagamentos = ($e->pagamentos_count ?? 0) > 0;
+                            $isQuitado = (($e->abertas_count ?? 0) <= 0) && (($e->vencidas_count ?? 0) <= 0);
+                        @endphp
                         <tr x-data="menu()" x-init="init()">
                             <td class="tnum col-right">{{ $e->id }}</td>
                             <td class="truncate-1">{{ $e->cliente?->nome ?? '—' }}</td>
@@ -207,7 +217,15 @@
                                 {{ $e->quitado_por !== null ? $moeda($e->quitado_por) : '—' }}
                             </td>
                             <td class="text-right whitespace-nowrap">
-                                <a class="btn btn-ghost mr-2" href="{{ route('emprestimos.show',$e) }}">Abrir</a>
+                                {{-- ✅ Abrir com confirmação se quitado --}}
+                                <a
+                                    class="btn btn-ghost mr-2 js-open-loan"
+                                    href="{{ route('emprestimos.show',$e) }}"
+                                    data-status="{{ $isQuitado ? 'quitado' : 'aberto' }}"
+                                    data-loan-id="{{ $e->id }}"
+                                    data-cliente="{{ e($e->cliente?->nome ?? '') }}"
+                                >Abrir</a>
+
                                 <button @click="toggle($event)" class="btn btn-ghost px-3" aria-label="Mais ações">⋯</button>
 
                                 <template x-teleport="body">
@@ -243,7 +261,7 @@
 
     <div class="mt-4">{{ $emprestimos->links() }}</div>
 
-    {{-- Alpine helpers + confirmação de exclusão (delegação) --}}
+    {{-- Alpine helpers + confirmação de exclusão (delegação) + confirmação de abrir quitado --}}
     <script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
     <script>
         /* Comportamento do menu "⋯" */
@@ -259,22 +277,51 @@
                 },
                 toggle(ev){
                     this.rect = ev.currentTarget.getBoundingClientRect();
-                    // fecha outros menus
                     window.dispatchEvent(new CustomEvent('menu:open'));
                     this.open = !this.open;
                 },
                 close(){ this.open=false; },
                 init(){
-                    // fecha este quando outro abrir
                     window.addEventListener('menu:open', () => { this.open=false; });
-                    // fecha ao redimensionar/rolar
                     window.addEventListener('resize', () => this.close());
                     window.addEventListener('scroll', () => this.close(), true);
                 }
             }
         }
 
-        // Delegação: funciona mesmo com x-teleport
+        // ✅ Confirmar abrir empréstimo quitado (delegação)
+        document.addEventListener('click', function(ev){
+            const a = ev.target.closest('a.js-open-loan');
+            if(!a) return;
+
+            const status = (a.dataset.status || '').toLowerCase();
+            if(status !== 'quitado') return;
+
+            ev.preventDefault();
+
+            const loanId  = a.dataset.loanId || '';
+            const cliente = a.dataset.cliente || '';
+
+            if (typeof Swal === 'undefined') {
+                const ok = confirm(`O empréstimo #${loanId}${cliente ? ' — ' + cliente : ''} já foi quitado.\nDeseja prosseguir mesmo assim?`);
+                if (ok) window.location.href = a.href;
+                return;
+            }
+
+            Swal.fire({
+                title: 'Empréstimo quitado',
+                html: `O empréstimo <b>#${loanId}</b>${cliente ? ` — <b>${cliente}</b>` : ''} já foi <b>quitado</b>.<br>Deseja prosseguir mesmo assim?`,
+                icon: 'info',
+                showCancelButton: true,
+                confirmButtonText: 'Sim, abrir',
+                cancelButtonText: 'Cancelar',
+                reverseButtons: true,
+            }).then(res => {
+                if (res.isConfirmed) window.location.href = a.href;
+            });
+        }, true);
+
+        // Delegação: funciona mesmo com x-teleport (exclusão)
         document.addEventListener('submit', function(ev){
             const form = ev.target.closest('.js-del-form');
             if(!form) return;
