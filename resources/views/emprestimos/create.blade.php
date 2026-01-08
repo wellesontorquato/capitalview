@@ -1,184 +1,199 @@
 <x-app-layout>
     <x-slot name="header"><h2 class="font-semibold text-xl">Novo Empréstimo</h2></x-slot>
 
-    <div class="grid lg:grid-cols-3 gap-6">
-        <div class="card lg:col-span-2">
-            <div class="card-p">
-                @if ($errors->any())
-                    <div class="mb-4 p-3 rounded bg-red-100 text-red-800">
-                        <ul class="list-disc list-inside">
-                            @foreach ($errors->all() as $e) <li>{{ $e }}</li> @endforeach
-                        </ul>
-                    </div>
-                @endif
+    {{-- FIX MOBILE: evita corte no fim da página (altura/overflow) + espaço p/ barra do navegador --}}
+    <style>
+        @media (max-width: 1023px) {
+            /* caso algum CSS global esteja limitando altura/overflow */
+            .card,
+            .card-p {
+                height: auto !important;
+                max-height: none !important;
+                overflow: visible !important;
+            }
+        }
+    </style>
 
-                <form method="POST" action="{{ route('emprestimos.store') }}" class="space-y-4" id="form-emprestimo">
-                    @csrf
-
-                    {{-- CLIENTE --}}
-                    <div>
-                        <label class="block text-sm mb-1">Cliente</label>
-                        <select name="cliente_id" class="w-full rounded-xl border-slate-300 focus:ring-brand-500 focus:border-brand-500" required>
-                            @foreach($clientes as $c)
-                                <option value="{{ $c->id }}" @selected(old('cliente_id', request('cliente'))==$c->id)>{{ $c->nome }}</option>
-                            @endforeach
-                        </select>
-                    </div>
-
-                    {{-- VALOR E TAXA --}}
-                    <div class="grid sm:grid-cols-2 gap-4">
-                        <div>
-                            <label class="block text-sm mb-1">Valor empréstimo</label>
-                            <input
-                                type="number" step="0.01" min="0.01" name="valor_principal" id="valor_principal"
-                                class="w-full rounded-xl border-slate-300 focus:ring-brand-500 focus:border-brand-500"
-                                value="{{ old('valor_principal') }}" placeholder="Ex.: 10000.00" required>
+    <div class="pb-[calc(env(safe-area-inset-bottom)+6rem)]">
+        <div class="grid lg:grid-cols-3 gap-6">
+            <div class="card lg:col-span-2">
+                <div class="card-p">
+                    @if ($errors->any())
+                        <div class="mb-4 p-3 rounded bg-red-100 text-red-800">
+                            <ul class="list-disc list-inside">
+                                @foreach ($errors->all() as $e) <li>{{ $e }}</li> @endforeach
+                            </ul>
                         </div>
-                        <div>
-                            <label class="block text-sm mb-1">Taxa mensal (ex.: 0,10 = 10%)</label>
-                            <input
-                                type="text" inputmode="decimal" name="taxa_mensal" id="taxa_mensal"
-                                class="w-full rounded-xl border-slate-300 focus:ring-brand-500 focus:border-brand-500"
-                                value="{{ old('taxa_mensal') }}" placeholder="Ex.: 0,10" required>
-                            <p class="text-xs text-slate-500 mt-1">Pode usar vírgula ou ponto.</p>
-                        </div>
-                    </div>
+                    @endif
 
-                    {{-- TIPO DE CÁLCULO + PARCELAS + 1º VENCIMENTO --}}
-                    <div class="grid sm:grid-cols-3 gap-4">
+                    <form method="POST" action="{{ route('emprestimos.store') }}" class="space-y-4" id="form-emprestimo">
+                        @csrf
+
+                        {{-- CLIENTE --}}
                         <div>
-                            <label class="block text-sm mb-1">Tipo de cálculo</label>
-                            <select name="tipo_calculo" id="tipo_calculo" class="w-full rounded-xl border-slate-300 focus:ring-brand-500 focus:border-brand-500" required>
-                                <option value="FIXED_ON_PRINCIPAL" @selected(old('tipo_calculo')==='FIXED_ON_PRINCIPAL')>
-                                    Opção A — Juros fixos sobre o principal (parcela constante)
-                                </option>
-                                <option value="AMORTIZATION_ON_BALANCE" @selected(old('tipo_calculo')==='AMORTIZATION_ON_BALANCE')>
-                                    Opção B — Amortização + juros sobre saldo (parcela decrescente)
-                                </option>
+                            <label class="block text-sm mb-1">Cliente</label>
+                            <select name="cliente_id" class="w-full rounded-xl border-slate-300 focus:ring-brand-500 focus:border-brand-500" required>
+                                @foreach($clientes as $c)
+                                    <option value="{{ $c->id }}" @selected(old('cliente_id', request('cliente'))==$c->id)>{{ $c->nome }}</option>
+                                @endforeach
                             </select>
                         </div>
+
+                        {{-- VALOR E TAXA --}}
+                        <div class="grid sm:grid-cols-2 gap-4">
+                            <div>
+                                <label class="block text-sm mb-1">Valor empréstimo</label>
+                                <input
+                                    type="number" step="0.01" min="0.01" name="valor_principal" id="valor_principal"
+                                    class="w-full rounded-xl border-slate-300 focus:ring-brand-500 focus:border-brand-500"
+                                    value="{{ old('valor_principal') }}" placeholder="Ex.: 10000.00" required>
+                            </div>
+                            <div>
+                                <label class="block text-sm mb-1">Taxa mensal (ex.: 0,10 = 10%)</label>
+                                <input
+                                    type="text" inputmode="decimal" name="taxa_mensal" id="taxa_mensal"
+                                    class="w-full rounded-xl border-slate-300 focus:ring-brand-500 focus:border-brand-500"
+                                    value="{{ old('taxa_mensal') }}" placeholder="Ex.: 0,10" required>
+                                <p class="text-xs text-slate-500 mt-1">Pode usar vírgula ou ponto.</p>
+                            </div>
+                        </div>
+
+                        {{-- TIPO DE CÁLCULO + PARCELAS + 1º VENCIMENTO --}}
+                        <div class="grid sm:grid-cols-3 gap-4">
+                            <div>
+                                <label class="block text-sm mb-1">Tipo de cálculo</label>
+                                <select name="tipo_calculo" id="tipo_calculo" class="w-full rounded-xl border-slate-300 focus:ring-brand-500 focus:border-brand-500" required>
+                                    <option value="FIXED_ON_PRINCIPAL" @selected(old('tipo_calculo')==='FIXED_ON_PRINCIPAL')>
+                                        Opção A — Juros fixos sobre o principal (parcela constante)
+                                    </option>
+                                    <option value="AMORTIZATION_ON_BALANCE" @selected(old('tipo_calculo')==='AMORTIZATION_ON_BALANCE')>
+                                        Opção B — Amortização + juros sobre saldo (parcela decrescente)
+                                    </option>
+                                </select>
+                            </div>
+                            <div>
+                                <label class="block text-sm mb-1">Qtd. Parcelas</label>
+                                <input
+                                    type="number" name="qtd_parcelas" id="qtd_parcelas" min="1" max="360"
+                                    class="w-full rounded-xl border-slate-300 focus:ring-brand-500 focus:border-brand-500"
+                                    value="{{ old('qtd_parcelas') }}" placeholder="Ex.: 10" required>
+                            </div>
+                            <div>
+                                <label class="block text-sm mb-1">Primeiro vencimento</label>
+                                <input
+                                    type="date" name="primeiro_vencimento" id="primeiro_vencimento"
+                                    class="w-full rounded-xl border-slate-300 focus:ring-brand-500 focus:border-brand-500"
+                                    value="{{ old('primeiro_vencimento') }}">
+                            </div>
+                        </div>
+
+                        {{-- 1ª PARCELA: PROPORCIONAL vs INTEGRAL --}}
+                        <fieldset class="border border-slate-200 rounded-xl p-3">
+                            <legend class="text-sm font-semibold px-2">1ª parcela</legend>
+                            <div class="grid sm:grid-cols-2 gap-3 text-sm">
+                                <label class="inline-flex items-center gap-2">
+                                    <input type="radio" name="primeira_proporcional" value="1"
+                                           @checked(old('primeira_proporcional', '1')==='1')>
+                                    1ª parcela proporcional (se &lt; 30 dias)
+                                </label>
+                                <label class="inline-flex items-center gap-2">
+                                    <input type="radio" name="primeira_proporcional" value="0"
+                                           @checked(old('primeira_proporcional')==='0')>
+                                    1ª parcela integral
+                                </label>
+                            </div>
+                            <p class="text-xs text-slate-500 mt-2" id="hint-proporcional">
+                                Se proporcional, os <strong>juros</strong> da 1ª parcela serão ajustados por <code>dias/30</code>
+                                com base na diferença entre hoje e o primeiro vencimento. A <strong>amortização</strong> permanece igual.
+                            </p>
+                        </fieldset>
+
+                        {{-- OBSERVAÇÕES --}}
                         <div>
-                            <label class="block text-sm mb-1">Qtd. Parcelas</label>
-                            <input
-                                type="number" name="qtd_parcelas" id="qtd_parcelas" min="1" max="360"
+                            <label class="block text-sm mb-1">Observações</label>
+                            <textarea
+                                name="observacoes" rows="3"
                                 class="w-full rounded-xl border-slate-300 focus:ring-brand-500 focus:border-brand-500"
-                                value="{{ old('qtd_parcelas') }}" placeholder="Ex.: 10" required>
+                                placeholder="Anotações internas do contrato...">{{ old('observacoes') }}</textarea>
                         </div>
-                        <div>
-                            <label class="block text-sm mb-1">Primeiro vencimento</label>
-                            <input
-                                type="date" name="primeiro_vencimento" id="primeiro_vencimento"
-                                class="w-full rounded-xl border-slate-300 focus:ring-brand-500 focus:border-brand-500"
-                                value="{{ old('primeiro_vencimento') }}">
+
+                        {{-- AÇÕES --}}
+                        <div class="flex gap-2">
+                            <a href="{{ route('emprestimos.index') }}" class="btn btn-ghost">Cancelar</a>
+                            <button class="btn btn-primary">Salvar</button>
                         </div>
-                    </div>
-
-                    {{-- 1ª PARCELA: PROPORCIONAL vs INTEGRAL --}}
-                    <fieldset class="border border-slate-200 rounded-xl p-3">
-                        <legend class="text-sm font-semibold px-2">1ª parcela</legend>
-                        <div class="grid sm:grid-cols-2 gap-3 text-sm">
-                            <label class="inline-flex items-center gap-2">
-                                <input type="radio" name="primeira_proporcional" value="1"
-                                       @checked(old('primeira_proporcional', '1')==='1')>
-                                1ª parcela proporcional (se &lt; 30 dias)
-                            </label>
-                            <label class="inline-flex items-center gap-2">
-                                <input type="radio" name="primeira_proporcional" value="0"
-                                       @checked(old('primeira_proporcional')==='0')>
-                                1ª parcela integral
-                            </label>
-                        </div>
-                        <p class="text-xs text-slate-500 mt-2" id="hint-proporcional">
-                            Se proporcional, os <strong>juros</strong> da 1ª parcela serão ajustados por <code>dias/30</code>
-                            com base na diferença entre hoje e o primeiro vencimento. A <strong>amortização</strong> permanece igual.
-                        </p>
-                    </fieldset>
-
-                    {{-- OBSERVAÇÕES --}}
-                    <div>
-                        <label class="block text-sm mb-1">Observações</label>
-                        <textarea
-                            name="observacoes" rows="3"
-                            class="w-full rounded-xl border-slate-300 focus:ring-brand-500 focus:border-brand-500"
-                            placeholder="Anotações internas do contrato...">{{ old('observacoes') }}</textarea>
-                    </div>
-
-                    {{-- AÇÕES --}}
-                    <div class="flex gap-2">
-                        <a href="{{ route('emprestimos.index') }}" class="btn btn-ghost">Cancelar</a>
-                        <button class="btn btn-primary">Salvar</button>
-                    </div>
-                </form>
+                    </form>
+                </div>
             </div>
-        </div>
 
-        {{-- PAINEL DE DICAS/REGRAS + PRÉVIA DINÂMICA --}}
-        <div class="card">
-            <div class="card-p space-y-4">
-                <h3 class="font-semibold text-ink-900">Como funciona</h3>
-                <ul class="text-sm list-disc pl-5 space-y-2 text-slate-600">
-                    <li>
-                        <strong>Opção A — Juros fixos sobre o principal</strong>: parcela = (principal ÷ parcelas) + (taxa × principal).<br>
-                        Ex.: 10.000 em 10x, taxa 0,10 → parcela <u>constante</u> de 2.000 (1.000 de amortização + 1.000 de juros).
-                    </li>
-                    <li>
-                        <strong>Opção B — Amortização + juros sobre saldo</strong>: amortização fixa (principal ÷ parcelas) e juros sobre o saldo restante.<br>
-                        Ex.: 1ª parcela ≈ 2.000 → última ≈ 1.100 (com taxa 0,10 e 10 parcelas).
-                    </li>
-                    <li>
-                        <strong>Taxa mensal</strong>: informe como decimal. Ex.: 0,10 = 10% ao mês; 0,025 = 2,5% ao mês.
-                    </li>
-                </ul>
+            {{-- PAINEL DE DICAS/REGRAS + PRÉVIA DINÂMICA --}}
+            <div class="card">
+                <div class="card-p space-y-4">
+                    <h3 class="font-semibold text-ink-900">Como funciona</h3>
+                    <ul class="text-sm list-disc pl-5 space-y-2 text-slate-600">
+                        <li>
+                            <strong>Opção A — Juros fixos sobre o principal</strong>: parcela = (principal ÷ parcelas) + (taxa × principal).<br>
+                            Ex.: 10.000 em 10x, taxa 0,10 → parcela <u>constante</u> de 2.000 (1.000 de amortização + 1.000 de juros).
+                        </li>
+                        <li>
+                            <strong>Opção B — Amortização + juros sobre saldo</strong>: amortização fixa (principal ÷ parcelas) e juros sobre o saldo restante.<br>
+                            Ex.: 1ª parcela ≈ 2.000 → última ≈ 1.100 (com taxa 0,10 e 10 parcelas).
+                        </li>
+                        <li>
+                            <strong>Taxa mensal</strong>: informe como decimal. Ex.: 0,10 = 10% ao mês; 0,025 = 2,5% ao mês.
+                        </li>
+                    </ul>
 
-                <div class="border border-slate-200 rounded-xl p-3">
-                    <h4 class="font-semibold mb-2">Prévia do cálculo</h4>
+                    <div class="border border-slate-200 rounded-xl p-3">
+                        <h4 class="font-semibold mb-2">Prévia do cálculo</h4>
 
-                    <div class="text-sm text-slate-600 mb-2">
-                        <div><span class="font-medium">Tipo:</span> <span id="prev-tipo">—</span></div>
-                        <div><span class="font-medium">Empréstimo:</span> <span id="prev-pv">—</span></div>
-                        <div><span class="font-medium">Taxa mensal:</span> <span id="prev-i">—</span></div>
-                        <div><span class="font-medium">Parcelas:</span> <span id="prev-n">—</span></div>
-                    </div>
-
-                    <div class="grid grid-cols-1 gap-2 text-sm">
-                        {{-- Opção A --}}
-                        <div id="box-a" class="hidden">
-                            <div class="flex justify-between">
-                                <span>Parcela (fixa)*:</span>
-                                <span class="font-semibold" id="a-parcela">—</span>
-                            </div>
-                            <div class="flex justify-between">
-                                <span>Juros totais:</span>
-                                <span class="font-semibold" id="a-juros">—</span>
-                            </div>
-                            <div class="flex justify-between">
-                                <span>Total pago:</span>
-                                <span class="font-semibold" id="a-total">—</span>
-                            </div>
-                            <p class="text-xs text-slate-500" id="a-observacao" class="hidden"></p>
+                        <div class="text-sm text-slate-600 mb-2">
+                            <div><span class="font-medium">Tipo:</span> <span id="prev-tipo">—</span></div>
+                            <div><span class="font-medium">Empréstimo:</span> <span id="prev-pv">—</span></div>
+                            <div><span class="font-medium">Taxa mensal:</span> <span id="prev-i">—</span></div>
+                            <div><span class="font-medium">Parcelas:</span> <span id="prev-n">—</span></div>
                         </div>
 
-                        {{-- Opção B --}}
-                        <div id="box-b" class="hidden">
-                            <div class="flex justify-between">
-                                <span>1ª parcela:</span>
-                                <span class="font-semibold" id="b-parcela-1">—</span>
+                        <div class="grid grid-cols-1 gap-2 text-sm">
+                            {{-- Opção A --}}
+                            <div id="box-a" class="hidden">
+                                <div class="flex justify-between">
+                                    <span>Parcela (fixa)*:</span>
+                                    <span class="font-semibold" id="a-parcela">—</span>
+                                </div>
+                                <div class="flex justify-between">
+                                    <span>Juros totais:</span>
+                                    <span class="font-semibold" id="a-juros">—</span>
+                                </div>
+                                <div class="flex justify-between">
+                                    <span>Total pago:</span>
+                                    <span class="font-semibold" id="a-total">—</span>
+                                </div>
+                                <p class="text-xs text-slate-500 hidden" id="a-observacao"></p>
                             </div>
-                            <div class="flex justify-between">
-                                <span>Última parcela:</span>
-                                <span class="font-semibold" id="b-parcela-n">—</span>
-                            </div>
-                            <div class="flex justify-between">
-                                <span>Juros totais (estim.):</span>
-                                <span class="font-semibold" id="b-juros">—</span>
-                            </div>
-                            <div class="flex justify-between">
-                                <span>Total pago (estim.):</span>
-                                <span class="font-semibold" id="b-total">—</span>
-                            </div>
-                        </div>
 
-                        <p id="prev-alert" class="text-xs text-red-600 mt-2 hidden">Preencha valores válidos para ver a prévia.</p>
+                            {{-- Opção B --}}
+                            <div id="box-b" class="hidden">
+                                <div class="flex justify-between">
+                                    <span>1ª parcela:</span>
+                                    <span class="font-semibold" id="b-parcela-1">—</span>
+                                </div>
+                                <div class="flex justify-between">
+                                    <span>Última parcela:</span>
+                                    <span class="font-semibold" id="b-parcela-n">—</span>
+                                </div>
+                                <div class="flex justify-between">
+                                    <span>Juros totais (estim.):</span>
+                                    <span class="font-semibold" id="b-juros">—</span>
+                                </div>
+                                <div class="flex justify-between">
+                                    <span>Total pago (estim.):</span>
+                                    <span class="font-semibold" id="b-total">—</span>
+                                </div>
+                            </div>
+
+                            <p id="prev-alert" class="text-xs text-red-600 mt-2 hidden">Preencha valores válidos para ver a prévia.</p>
+                        </div>
                     </div>
                 </div>
             </div>
@@ -287,14 +302,16 @@
                     const jurosTotais = round2(jurosPrimeiro + jurosMes * (n - 1));
                     const totalPago   = round2(pv + jurosTotais);
 
-                    // Mostra as duas quando houver proporcionalidade (<30 dias)
                     if (ratio < 1) {
                         aParcela.textContent = `1ª: ${fmtBRL(parcelaPrimeira)} | demais: ${fmtBRL(parcelaNormal)}`;
                         aObs.textContent = 'Obs.: 1ª parcela proporcional por dias/30; demais permanecem fixas.';
+                        show(aObs, true);
                     } else {
                         aParcela.textContent = fmtBRL(parcelaNormal);
                         aObs.textContent = '';
+                        show(aObs, false);
                     }
+
                     aJuros.textContent   = fmtBRL(jurosTotais);
                     aTotal.textContent   = fmtBRL(totalPago);
 
@@ -302,16 +319,12 @@
                     show(boxB, false);
                 } else {
                     // Opção B: amortização fixa + juros sobre saldo
-                    // 1ª parcela proporcional nos juros
                     const juros1 = i * pv * ratio;
                     const primeiraParcela = round2(amort + juros1);
 
-                    // última parcela segue fórmula padrão (não é afetada pelo ratio)
                     const saldoPenultimo = pv - amort * (n - 1);
                     const ultimaParcela  = round2(amort + i * saldoPenultimo);
 
-                    // Juros totais base da B: i * pv * (n + 1) / 2
-                    // Ajuste pela proporcionalidade do 1º mês: subtrai (1 - ratio) * i * pv
                     const jurosTotaisBase = i * pv * (n + 1) / 2;
                     const jurosTotais = round2(jurosTotaisBase - (1 - ratio) * i * pv);
                     const totalPago   = round2(pv + jurosTotais);
@@ -336,7 +349,6 @@
                 elRadioInt.addEventListener(evt, calcPreview);
             });
 
-            // inicial
             calcPreview();
         })();
     </script>
