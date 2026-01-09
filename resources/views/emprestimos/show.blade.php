@@ -105,11 +105,14 @@
                                 @csrf
                                 <button id="btn-quitar" type="button" class="btn btn-primary w-full sm:w-auto">Quitar tudo</button>
                             </form>
-                            <a href="{{ route('emprestimos.recibo', $emprestimo) }}"
+                            <button
+                                type="button"
+                                id="btn-recibo"
+                                data-recibo-url="{{ route('emprestimos.recibo', $emprestimo) }}"
                                 class="btn btn-secondary w-full sm:w-auto"
-                                target="_blank" rel="noopener">
+                                >
                                 Gerar recibo (PDF)
-                            </a>
+                            </button>
                         </div>
                     </div>
 
@@ -851,5 +854,69 @@
         }
       });
     })();
+    </script>
+    <script>
+        (function() {
+        const btn = document.getElementById('btn-recibo');
+        if (!btn) return;
+
+        const baseUrl = btn.getAttribute('data-recibo-url');
+        if (!baseUrl) return;
+
+        const openRecibo = (obsText = '') => {
+            // monta URL final
+            let url = baseUrl;
+
+            const obs = (obsText || '').trim();
+            if (obs.length) {
+            const sep = url.includes('?') ? '&' : '?';
+            url = `${url}${sep}obs=${encodeURIComponent(obs)}`;
+            }
+
+            // mantém seu comportamento de abrir em nova aba
+            window.open(url, '_blank', 'noopener');
+        };
+
+        btn.addEventListener('click', async () => {
+            const ask = await Swal.fire({
+            title: 'Observação no recibo',
+            text: 'Deseja adicionar uma observação antes de gerar o PDF?',
+            icon: 'question',
+            showCancelButton: true,
+            confirmButtonText: 'Sim, adicionar',
+            cancelButtonText: 'Não, gerar agora',
+            reverseButtons: true,
+            });
+
+            // clicou em "Não, gerar agora" (cancel)
+            if (ask.dismiss === Swal.DismissReason.cancel) {
+            openRecibo('');
+            return;
+            }
+
+            // clicou em "Sim, adicionar"
+            const obsModal = await Swal.fire({
+            title: 'Digite a observação',
+            input: 'textarea',
+            inputPlaceholder: 'Ex.: Em caso de atraso, incide multa de 2% + juros de 0,33% ao dia.',
+            inputAttributes: {
+                'aria-label': 'Observação'
+            },
+            showCancelButton: true,
+            confirmButtonText: 'Gerar PDF',
+            cancelButtonText: 'Cancelar',
+            inputValidator: (value) => {
+                // se quiser permitir vazio, é só retornar null sempre
+                const v = (value || '').trim();
+                if (v.length > 600) return 'A observação está muito grande (máx. 600 caracteres).';
+                return null;
+            }
+            });
+
+            if (obsModal.isConfirmed) {
+            openRecibo(obsModal.value || '');
+            }
+        });
+        })();
     </script>
 </x-app-layout>
