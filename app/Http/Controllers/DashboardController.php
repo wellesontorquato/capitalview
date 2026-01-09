@@ -4,6 +4,7 @@ namespace App\Http\Controllers;
 
 use App\Models\Emprestimo;
 use App\Models\Parcela;
+use App\Models\Pagamento;
 use App\Services\ReportExportService;
 use Illuminate\Http\Request;
 use Illuminate\Support\Carbon;
@@ -26,7 +27,7 @@ class DashboardController extends Controller
             return (float) ($parcelaAjustada !== null ? $parcelaAjustada : $p->valor_parcela);
         };
 
-        // “Total pago” robusto:
+        // “Total pago” robusto em uma parcela:
         // 1) total_pago (se existir/preenchido)
         // 2) valor_pago (se existir/preenchido)
         // 3) pagamentos_sum_valor (from withSum)
@@ -61,9 +62,6 @@ class DashboardController extends Controller
         // 3) default: mês atual
 
         $today = Carbon::today();
-
-        $rangeStart = null;
-        $rangeEnd   = null;
 
         if ($request->filled('de') || $request->filled('ate')) {
             $rangeStart = $request->filled('de')
@@ -165,40 +163,70 @@ class DashboardController extends Controller
             ->get()
             ->sum(fn ($p) => $saldoAtual($p));
 
-        // ================= TOTAIS DO PERÍODO (para o gráfico) =================
-        // Total emprestado no período = soma do valor das parcelas com vencimento no período
-        // Total pago no período       = soma do pago dessas mesmas parcelas (robusto)
-        //
-        // Obs: Isso funciona mesmo se o pagamento aconteceu antes/depois — o recorte é o "período das parcelas".
-        // Se você quiser recortar por data de pagamento, aí precisaríamos da coluna de data do pagamento/tabela.
+        // ================= TOTAIS DO GRÁFICO (Emprestado x Pago) =================
+        // - Emprestado: igual ao card (carteira aberta)
+        // - Pago no período: soma de pagamentos (qualquer valor) cuja DATA DO PAGAMENTO esteja no período,
+        //   independente do vencimento da parcela / se foi parcial / juros / etc.
 
-        $parcelasPeriodo = (clone $parcelasBase)
-            ->whereBetween('vencimento', [$start, $end]);
+        // Total emprestado no gráfico = mesma métrica do card
+        $totalEmprestadoPeriodo = $totalEmprestado;
 
-        $parcelasPeriodo = $applySearchFilter($parcelasPeriodo);
+        // Descobre automaticamente qual coluna de data existe em pagamentos
+        $pagamentoDateCol = null;
+        foreach (['data_pagamento', 'pago_em', 'data', 'created_at'] as $col) {
+            if (Schema::hasColumn('pagamentos', $col)) {
+                $pagamentoDateCol = $col;
+                break;
+            }
+        }
+        $pagamentoDateCol = $pagamentoDateCol ?: 'created_at';
 
-        // status (afeta lista, mas o gráfico geralmente faz sentido sem restringir; mesmo assim, vou respeitar se vier)
-        if ($statusFiltro === 'quitado') {
-            $parcelasPeriodo->whereRaw('LOWER(status) = ?', ['paga']);
-        } elseif ($statusFiltro === 'aberto') {
-            $parcelasPeriodo->whereRaw('LOWER(status) != ?', ['paga']);
-            $parcelasPeriodo = $applyEmprestimoNaoQuitado($parcelasPeriodo);
-        } elseif ($statusFiltro === 'vencer') {
-            $parcelasPeriodo->whereRaw('LOWER(status) != ?', ['paga'])
-                ->whereDate('vencimento', '>=', $today->toDateString());
-            $parcelasPeriodo = $applyEmprestimoNaoQuitado($parcelasPeriodo);
-        } elseif ($statusFiltro === 'atraso') {
-            $parcelasPeriodo->whereRaw('LOWER(status) != ?', ['paga'])
-                ->whereDate('vencimento', '<', $today->toDateString());
-            $parcelasPeriodo = $applyEmprestimoNaoQuitado($parcelasPeriodo);
+        $totalPagoPeriodoQuery = Pagamento::query()
+            ->whereDate($pagamentoDateCol, '>=', $start)
+            ->whereDate($pagamentoDateCol, '<=', $end);
+
+        // Aplica a busca (q) também ao total pago (via relações)
+        if ($q !== '') {
+            $totalPagoPeriodoQuery->whereHas('parcela', function ($qp) use ($q) {
+                $qp->where(function ($w) use ($q) {
+                    $w->orWhere('numero', 'like', "%{$q}%")
+                      ->orWhere('emprestimo_id', 'like', "%{$q}%")
+                      ->orWhereHas('emprestimo.cliente', function ($qc) use ($q) {
+                          $qc->where('nome', 'like', "%{$q}%");
+                      });
+                });
+            });
         }
 
-        $parcelasPeriodoCol = (clone $parcelasPeriodo)->get();
+        // Status filtro aplicado ao "pago no período" (quando fizer sentido)
+        // - quitado: só pagamentos vinculados a parcelas pagas
+        // - aberto/vencer/atraso: pagamentos vinculados a parcelas não pagas (mesma lógica do dashboard)
+        if ($statusFiltro === 'quitado') {
+            $totalPagoPeriodoQuery->whereHas('parcela', function ($qp) {
+                $qp->whereRaw('LOWER(status) = ?', ['paga']);
+            });
+        } elseif (in_array($statusFiltro, ['aberto', 'vencer', 'atraso'], true)) {
+            $totalPagoPeriodoQuery->whereHas('parcela', function ($qp) use ($today, $statusFiltro) {
+                $qp->whereRaw('LOWER(status) != ?', ['paga']);
 
-        $totalEmprestadoPeriodo = (float) $parcelasPeriodoCol->sum(fn ($p) => $parcelaValor($p));
-        $totalPagoPeriodo       = (float) $parcelasPeriodoCol->sum(fn ($p) => $parcelaPago($p));
+                if ($statusFiltro === 'vencer') {
+                    $qp->whereDate('vencimento', '>=', $today->toDateString());
+                } elseif ($statusFiltro === 'atraso') {
+                    $qp->whereDate('vencimento', '<', $today->toDateString());
+                }
+            });
 
-        // ================= PRÓXIMOS VENCIMENTOS (AGORA RESPEITA O PERÍODO + FILTROS) =================
+            // Se existir status do empréstimo e você quiser manter coerência com "em aberto"
+            if ($hasEmprestimoStatus) {
+                $totalPagoPeriodoQuery->whereHas('parcela.emprestimo', function ($qe) {
+                    $qe->whereRaw('LOWER(status) != ?', ['quitado']);
+                });
+            }
+        }
+
+        $totalPagoPeriodo = (float) $totalPagoPeriodoQuery->sum('valor');
+
+        // ================= PRÓXIMOS VENCIMENTOS (RESPEITA O PERÍODO + FILTROS) =================
 
         $proximasQuery = (clone $parcelasEmAbertoQuery)
             ->whereBetween('vencimento', [$start, $end])
@@ -240,13 +268,14 @@ class DashboardController extends Controller
 
             if ($what === 'kpis') {
                 $rows = [
-                    ['Métrica' => 'Total emprestado (aberto)',          'Valor' => $moeda($totalEmprestado)],
-                    ['Métrica' => 'Aberto (a receber)',                 'Valor' => $moeda($aberto)],
-                    ['Métrica' => 'Vence em 30 dias',                   'Valor' => $moeda($ate30)],
-                    ['Métrica' => 'Em atraso',                          'Valor' => $moeda($atraso)],
-                    ['Métrica' => 'Emprestado no período',              'Valor' => $moeda($totalEmprestadoPeriodo)],
-                    ['Métrica' => 'Pago no período',                    'Valor' => $moeda($totalPagoPeriodo)],
-                    ['Métrica' => 'Período',                            'Valor' => Carbon::parse($start)->format('d/m/Y') . ' até ' . Carbon::parse($end)->format('d/m/Y')],
+                    ['Métrica' => 'Total emprestado (aberto)', 'Valor' => $moeda($totalEmprestado)],
+                    ['Métrica' => 'Aberto (a receber)',        'Valor' => $moeda($aberto)],
+                    ['Métrica' => 'Vence em 30 dias',          'Valor' => $moeda($ate30)],
+                    ['Métrica' => 'Em atraso',                 'Valor' => $moeda($atraso)],
+                    ['Métrica' => 'Emprestado (carteira)',     'Valor' => $moeda($totalEmprestadoPeriodo)],
+                    ['Métrica' => 'Pago no período',           'Valor' => $moeda($totalPagoPeriodo)],
+                    ['Métrica' => 'Período',                   'Valor' => Carbon::parse($start)->format('d/m/Y') . ' até ' . Carbon::parse($end)->format('d/m/Y')],
+                    ['Métrica' => 'Data pagamento (coluna)',   'Valor' => $pagamentoDateCol],
                 ];
 
                 $columns = [
@@ -259,7 +288,11 @@ class DashboardController extends Controller
                 if ($exp === 'pdf') {
                     return $exporter->pdf('reports.table', compact('title', 'columns', 'rows'), 'dashboard-kpis.pdf');
                 }
-                return $exporter->excel($rows, $exp === 'csv' ? 'dashboard-kpis.csv' : 'dashboard-kpis.xlsx');
+
+                return $exporter->excel(
+                    $rows,
+                    $exp === 'csv' ? 'dashboard-kpis.csv' : 'dashboard-kpis.xlsx'
+                );
             }
 
             // ---- Vencimentos (no período, sem paginação) ----
@@ -292,12 +325,20 @@ class DashboardController extends Controller
                 ['key' => 'Saldo',        'label' => 'Saldo',        'align' => 'right'],
             ];
 
-            $title = 'Dashboard — Vencimentos (' . Carbon::parse($start)->format('d/m/Y') . ' a ' . Carbon::parse($end)->format('d/m/Y') . ')';
+            $title = 'Dashboard — Vencimentos (' .
+                Carbon::parse($start)->format('d/m/Y') .
+                ' a ' .
+                Carbon::parse($end)->format('d/m/Y') .
+                ')';
 
             if ($exp === 'pdf') {
                 return $exporter->pdf('reports.table', compact('title', 'columns', 'rows'), 'dashboard-vencimentos.pdf');
             }
-            return $exporter->excel($rows, $exp === 'csv' ? 'dashboard-vencimentos.csv' : 'dashboard-vencimentos.xlsx');
+
+            return $exporter->excel(
+                $rows,
+                $exp === 'csv' ? 'dashboard-vencimentos.csv' : 'dashboard-vencimentos.xlsx'
+            );
         }
         // ================= FIM EXPORTAÇÃO =================
 
