@@ -450,11 +450,10 @@
         <script>
             (function () {
                 const num = (v) => {
-                    const n = Number(v);
-                    return Number.isFinite(n) ? n : 0;
+                const n = Number(v);
+                return Number.isFinite(n) ? n : 0;
                 };
 
-                // Dados (PHP -> JS)
                 const aberto  = num(@json($aberto ?? 0));
                 const ate30   = num(@json($ate30 ?? 0));
                 const atraso  = num(@json($atraso ?? 0));
@@ -463,92 +462,109 @@
                 const totalPagoPeriodo       = num(@json($totalPagoPeriodo ?? 0));
 
                 const brl = (v, max = 2) => new Intl.NumberFormat("pt-BR", {
-                    style: "currency",
-                    currency: "BRL",
-                    maximumFractionDigits: max,
+                style: "currency",
+                currency: "BRL",
+                maximumFractionDigits: max,
                 }).format(v);
+
+                // ====== Instances (evita duplicação) ======
+                window.__dashCharts = window.__dashCharts || {};
+                const destroyIfExists = (key) => {
+                if (window.__dashCharts[key]) {
+                    window.__dashCharts[key].destroy();
+                    window.__dashCharts[key] = null;
+                }
+                };
 
                 // 1) Donut de distribuição
                 const ctxDist = document.getElementById("chartDistribuicao");
                 if (ctxDist) {
-                    new Chart(ctxDist, {
-                        type: "doughnut",
-                        data: {
-                            labels: ["Em aberto", "A vencer", "Em atraso"],
-                            datasets: [{
-                                data: [aberto, ate30, atraso],
-                            }],
+                destroyIfExists("dist");
+
+                window.__dashCharts.dist = new Chart(ctxDist, {
+                    type: "doughnut",
+                    data: {
+                    labels: ["Em aberto", "A vencer", "Em atraso"],
+                    datasets: [{
+                        data: [aberto, ate30, atraso],
+                        borderWidth: 0,
+                    }],
+                    },
+                    options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    plugins: {
+                        legend: {
+                        position: "bottom",
+                        labels: { boxWidth: 12, boxHeight: 12 }
                         },
-                        options: {
-                            responsive: true,
-                            maintainAspectRatio: false,
-                            plugins: {
-                                legend: {
-                                    position: "bottom",
-                                    labels: { boxWidth: 12, boxHeight: 12 }
-                                },
-                                tooltip: {
-                                    callbacks: {
-                                        label: (ctx) => `${ctx.label}: ${brl(ctx.parsed ?? 0)}`
-                                    }
-                                }
-                            },
-                            cutout: "68%",
-                        },
-                    });
+                        tooltip: {
+                        callbacks: {
+                            label: (ctx) => `${ctx.label}: ${brl(ctx.parsed ?? 0)}`
+                        }
+                        }
+                    },
+                    cutout: "68%",
+                    },
+                });
                 }
 
-                // 2) Emprestado x Pago (período)  ✅
+                // 2) Emprestado x Pago (período)
                 const ctxPeriodo = document.getElementById("chartPeriodo");
                 if (ctxPeriodo) {
-                    new Chart(ctxPeriodo, {
-                        type: "bar",
-                        data: {
-                            labels: ["Período selecionado"],
-                            datasets: [
-                                {
-                                    label: "Total emprestado",
-                                    data: [totalEmprestadoPeriodo],
-                                    borderWidth: 0,
-                                    borderRadius: 14,
-                                    barThickness: 48,
-                                },
-                                {
-                                    label: "Total pago",
-                                    data: [totalPagoPeriodo],
-                                    borderWidth: 0,
-                                    borderRadius: 14,
-                                    barThickness: 48,
-                                }
-                            ]
+                destroyIfExists("periodo");
+
+                window.__dashCharts.periodo = new Chart(ctxPeriodo, {
+                    type: "bar",
+                    data: {
+                    labels: ["Período selecionado"],
+                    datasets: [
+                        {
+                        label: "Total emprestado",
+                        data: [totalEmprestadoPeriodo],
+                        borderWidth: 0,
+                        borderRadius: 14,
+                        barThickness: 48,
+                        backgroundColor: "rgba(59, 130, 246, 0.35)",
+                        hoverBackgroundColor: "rgba(59, 130, 246, 0.55)",
                         },
-                        options: {
-                            responsive: true,
-                            maintainAspectRatio: false,
-                            scales: {
-                                x: {
-                                    grid: { display: false },
-                                    ticks: { font: { weight: "700" } }
-                                },
-                                y: {
-                                    ticks: {
-                                        callback: (value) => brl(value, 0),
-                                    }
-                                }
-                            },
-                            plugins: {
-                                legend: {
-                                    position: "bottom",
-                                    labels: { boxWidth: 12, boxHeight: 12 }
-                                },
-                                tooltip: {
-                                    callbacks: {
-                                        label: (ctx) => `${ctx.dataset.label}: ${brl(ctx.parsed.y ?? 0)}`
-                                    }
-                                }
-                            }
+                        {
+                        label: "Total pago",
+                        data: [totalPagoPeriodo],
+                        borderWidth: 0,
+                        borderRadius: 14,
+                        barThickness: 48,
+                        backgroundColor: "rgba(236, 72, 153, 0.30)",
+                        hoverBackgroundColor: "rgba(236, 72, 153, 0.50)",
                         }
-                    });
+                    ]
+                    },
+                    options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    scales: {
+                        x: {
+                        grid: { display: false },
+                        ticks: { font: { weight: "700" } }
+                        },
+                        y: {
+                        beginAtZero: true,
+                        ticks: { callback: (value) => brl(value, 0) }
+                        }
+                    },
+                    plugins: {
+                        legend: {
+                        position: "bottom",
+                        labels: { boxWidth: 12, boxHeight: 12 }
+                        },
+                        tooltip: {
+                        callbacks: {
+                            label: (ctx) => `${ctx.dataset.label}: ${brl(ctx.parsed.y ?? 0)}`
+                        }
+                        }
+                    }
+                    }
+                });
                 }
             })();
         </script>
