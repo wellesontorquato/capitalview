@@ -70,8 +70,12 @@ class DashboardController extends Controller
 
         // ================= KPIs =================
 
-        // Total emprestado: soma do principal (independente de estar quitado)
-        $totalEmprestado = (float) Emprestimo::sum('valor_principal');
+        // Total emprestado (apenas empréstimos que ainda estão em aberto)
+        $totalEmprestado = (float) Emprestimo::query()
+            ->whereHas('parcelas', function ($q) {
+                $q->whereRaw('LOWER(status) != ?', ['paga']);
+            })
+            ->sum('valor_principal');
 
         // Em aberto: soma do saldo das parcelas pendentes
         $aberto = (float) (clone $parcelasEmAbertoQuery)
