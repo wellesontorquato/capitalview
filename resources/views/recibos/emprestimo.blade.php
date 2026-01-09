@@ -34,72 +34,71 @@
 
   .container { width:100%; margin:0 auto; }
 
-  header { text-align:center; margin-bottom:22px; border-bottom:1px solid #e0e0e0; padding-bottom:12px; }
-  h1 { font-size:20px; margin:0; font-weight:600; letter-spacing:.3px; }
+  header { text-align:center; margin-bottom:14px; border-bottom:1px solid #e0e0e0; padding-bottom:10px; }
+  h1 { font-size:18px; margin:0; font-weight:600; letter-spacing:.3px; }
 
   main { flex-grow:1; }
 
-  p { line-height:1.52; margin:12px 0; text-align:justify; }
+  p { line-height:1.45; margin:10px 0; text-align:justify; }
   .muted { color:#777; font-size:11px; }
 
-  /* Caixa de informações (um pouco mais compacta) */
+  /* Caixa de informações (mais compacta) */
   .info-box {
     background:#f9f9f9; border:1px solid #e0e0e0;
-    padding:14px; border-radius:8px; margin:18px 0;
+    padding:12px; border-radius:8px; margin:12px 0;
   }
   .info-grid {
-    display:grid; grid-template-columns:1fr 1fr; gap:10px 22px;
+    display:grid; grid-template-columns:1fr 1fr; gap:8px 18px;
   }
   .info-grid div { display:flex; flex-direction:column; }
-  .label { color:#555; font-size:10px; text-transform:uppercase; margin-bottom:2px; }
-  .value { font-weight:700; font-size:14px; }
+  .label { color:#555; font-size:9px; text-transform:uppercase; margin-bottom:2px; }
+  .value { font-weight:700; font-size:13px; }
 
-  .declaration-text { margin:22px 0; }
+  .declaration-text { margin:12px 0; }
 
-  /* ✅ Caixa de observação (discreta, institucional) */
+  /* ✅ CLÁUSULAS EXTRAS — SUPER COMPACTO (pra caber em 1 página) */
   .obs-box{
-    border:1px dashed #cfcfcf;
+    border:1px dashed #d7d7d7;
     background:#fff;
-    padding:12px 14px;
+    padding:8px 10px;
     border-radius:8px;
-    margin:14px 0 6px;
+    margin:8px 0 4px;
   }
   .obs-title{
-    font-size:10px;
+    font-size:9px;
     text-transform:uppercase;
     color:#555;
-    letter-spacing:.3px;
-    margin:0 0 6px;
+    letter-spacing:.25px;
+    margin:0 0 4px;
     font-weight:700;
   }
   .obs-text{
     margin:0;
-    font-size:12px;
-    line-height:1.52;
+    font-size:10px;          /* menor */
+    line-height:1.25;        /* mais fechado */
     text-align:justify;
   }
 
-  .date-location { text-align:right; margin-top:24px; font-size:12px; }
+  .date-location { text-align:right; margin-top:10px; font-size:11px; }
 
-  /* Assinaturas — mais distância entre blocos e mais espaço para assinar */
+  /* Assinaturas — compactado pra não quebrar página */
   .signatures-container {
-    display:flex; justify-content:space-between; column-gap:48px; /* + espaço lateral */
-    margin-top:25px; /* empurra bem para baixo */
+    display:flex; justify-content:space-between; column-gap:36px;
+    margin-top:12px;
   }
   .signature-block { flex:1; text-align:center; padding:0 6px; }
 
-  /* Área de escrita antes da linha: aumenta o "respiro" para caneta */
+  /* Área de escrita (reduzida, mas ainda confortável) */
   .signature-line {
-    margin-top:65px; /* <-- AQUI criamos a área para escrever antes da linha */
-    border-top:1px solid #333; padding-top:8px; font-size:12px;
+    margin-top:44px;         /* antes era 65px */
+    border-top:1px solid #333; padding-top:6px; font-size:12px;
   }
-  .signature-label { font-size:11px; color:#555; }
+  .signature-label { font-size:10px; color:#555; }
 
   footer {
-    margin-top:38px; text-align:center; font-size:10px; color:#888;
-    padding-top:10px; border-top:1px solid #e0e0e0;
+    margin-top:14px; text-align:center; font-size:9px; color:#888;
+    padding-top:8px; border-top:1px solid #e0e0e0;
   }
-  footer a { color:#555; text-decoration:none; font-weight:700; }
 </style>
 </head>
 <body>
@@ -149,10 +148,10 @@
       </p>
     </div>
 
-    {{-- ✅ Observações (opcional) --}}
+    {{-- ✅ CLÁUSULAS EXTRAS (opcional) — compacto para manter 1 página --}}
     @if(!empty($observacao))
       <div class="obs-box">
-        <div class="obs-title">Observações</div>
+        <div class="obs-title">CLÁUSULAS EXTRAS</div>
         <p class="obs-text">{!! nl2br(e($observacao)) !!}</p>
       </div>
     @endif
@@ -184,7 +183,8 @@
   </main>
 
   <footer>
-    Este recibo foi gerado eletronicamente. Para validade legal, deve ser assinado pelas partes. Recomenda-se a assinatura escrita de ambas as partes.</a>.
+    Este recibo foi gerado eletronicamente. Para validade legal, deve ser assinado pelas partes.
+    Recomenda-se a assinatura escrita de ambas as partes.
   </footer>
 </div>
 </body>
