@@ -13,6 +13,9 @@
         // juros simples sobre o principal
         $totalQuitacao = $valor * (1 + $emprestimo->taxa_periodo * $emprestimo->qtd_parcelas);
     }
+
+    // ✅ vem do controller (EmprestimoReciboController)
+    $observacao = trim((string)($observacao ?? ''));
 @endphp
 <!doctype html>
 <html lang="pt-BR">
@@ -52,6 +55,29 @@
   .value { font-weight:700; font-size:14px; }
 
   .declaration-text { margin:22px 0; }
+
+  /* ✅ Caixa de observação (discreta, institucional) */
+  .obs-box{
+    border:1px dashed #cfcfcf;
+    background:#fff;
+    padding:12px 14px;
+    border-radius:8px;
+    margin:14px 0 6px;
+  }
+  .obs-title{
+    font-size:10px;
+    text-transform:uppercase;
+    color:#555;
+    letter-spacing:.3px;
+    margin:0 0 6px;
+    font-weight:700;
+  }
+  .obs-text{
+    margin:0;
+    font-size:12px;
+    line-height:1.52;
+    text-align:justify;
+  }
 
   .date-location { text-align:right; margin-top:24px; font-size:12px; }
 
@@ -123,6 +149,14 @@
       </p>
     </div>
 
+    {{-- ✅ Observações (opcional) --}}
+    @if(!empty($observacao))
+      <div class="obs-box">
+        <div class="obs-title">Observações</div>
+        <p class="obs-text">{!! nl2br(e($observacao)) !!}</p>
+      </div>
+    @endif
+
     @if(!empty($credor['cidade']) || !empty($credor['uf']))
       <p class="date-location">
         {{ $credor['cidade'] ?? '' }}{{ !empty($credor['cidade']) && !empty($credor['uf']) ? ' - ' : '' }}{{ $credor['uf'] ?? '' }},
@@ -150,9 +184,7 @@
   </main>
 
   <footer>
-    Este recibo foi gerado eletronicamente. Para validade legal, deve ser assinado pelas partes.
-    Recomenda-se a assinatura digital via
-    <a href="https://www.gov.br/pt-br/servicos/assinatura-eletronica" target="_blank">gov.br (Assinatura Eletrônica)</a>.
+    Este recibo foi gerado eletronicamente. Para validade legal, deve ser assinado pelas partes. Recomenda-se a assinatura escrita de ambas as partes.</a>.
   </footer>
 </div>
 </body>

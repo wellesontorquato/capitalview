@@ -5,11 +5,12 @@ namespace App\Http\Controllers;
 use App\Models\Emprestimo;
 use Dompdf\Dompdf;
 use Dompdf\Options;
+use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
 
 class EmprestimoReciboController extends Controller
 {
-    public function download(Emprestimo $emprestimo)
+    public function download(Request $request, Emprestimo $emprestimo)
     {
         // Garante que o empréstimo é do usuário autenticado
         if ((int)$emprestimo->user_id !== (int)Auth::id()) {
@@ -18,36 +19,43 @@ class EmprestimoReciboController extends Controller
 
         $user = Auth::user();
 
+        // ✅ Observação vinda do modal (?obs=...)
+        $observacao = trim((string) $request->query('obs', ''));
+        // normaliza quebras e espaços
+        $observacao = preg_replace("/\r\n|\r/", "\n", $observacao);
+        $observacao = preg_replace("/[ \t]+/", " ", $observacao);
+
+        // limita tamanho (ajuste se quiser)
+        if (mb_strlen($observacao) > 600) {
+            $observacao = mb_substr($observacao, 0, 600);
+        }
+
         // Credor: pega do usuário logado e cai para o .env/config se faltar algo
         $credor = [
-            'nome'   => $user->name
-                        ?? config('app.recibo_credor_nome', config('app.name')),
-            'cpf'    => $user->cpf
-                        ?? config('app.recibo_credor_cpf'),      // pode ser null
-            'cidade' => $user->cidade
-                        ?? config('app.recibo_cidade'),           // se não tiver esses campos no users, tudo bem
-            'uf'     => $user->uf
-                        ?? config('app.recibo_uf'),
+            'nome'   => $user->name ?? config('app.recibo_credor_nome', config('app.name')),
+            'cpf'    => $user->cpf  ?? config('app.recibo_credor_cpf'),
+            'cidade' => $user->cidade ?? config('app.recibo_cidade'),
+            'uf'     => $user->uf ?? config('app.recibo_uf'),
         ];
 
-        $cliente = $emprestimo->cliente;                // relação emprestimo->cliente
+        $cliente = $emprestimo->cliente;
         $valor   = (float) $emprestimo->valor_principal;
 
         $data = [
-            'emprestimo' => $emprestimo,
-            'cliente'    => $cliente,
-            'credor'     => $credor,
-            'valor'      => $valor,
-            'hoje'       => now(),
+            'emprestimo'  => $emprestimo,
+            'cliente'     => $cliente,
+            'credor'      => $credor,
+            'valor'       => $valor,
+            'hoje'        => now(),
+            'observacao'  => $observacao, // ✅ passa pra view
         ];
 
         $html = view('recibos.emprestimo', $data)->render();
 
-        // Dompdf com opções seguras para nosso HTML
         $options = new Options([
-            'isRemoteEnabled' => true,             // pode deixar true; se não usa imagens remotas, pode ser false
-            'defaultFont'     => 'DejaVu Sans',    // evita tofu em PT-BR
-            'chroot'          => public_path(),    // permite referências locais (ex.: /assets/...)
+            'isRemoteEnabled' => true,
+            'defaultFont'     => 'DejaVu Sans',
+            'chroot'          => public_path(),
         ]);
 
         $pdf = new Dompdf($options);
@@ -55,11 +63,13 @@ class EmprestimoReciboController extends Controller
         $pdf->setPaper('A4', 'portrait');
         $pdf->render();
 
-        $filename = 'recibo-emprestimo-' . $emprestimo->id . '.pdf';
+        $filename = 'recibo-emprestimo-' . $emprestimo->id
+          . ($observacao ? '-com-observacao' : '')
+          . '.pdf';
 
         return response($pdf->output(), 200, [
             'Content-Type'        => 'application/pdf',
-            'Content-Disposition' => 'inline; filename="'.$filename.'"',
+            'Content-Disposition' => 'attachment; filename="'.$filename.'"',
         ]);
     }
 }
