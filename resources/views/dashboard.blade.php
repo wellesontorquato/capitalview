@@ -29,7 +29,7 @@
                 $stats = [
                     ['label' => 'Total Emprestado', 'value' => $totalEmprestado, 'color' => 'blue'],
                     ['label' => 'Em Aberto', 'value' => $aberto, 'color' => 'indigo'],
-                    ['label' => 'A Vencer (30d)', 'value' => $ate30, 'color' => 'amber'],
+                    ['label' => 'A Vencer (Mês atual)', 'value' => $ate30, 'color' => 'amber'],
                     ['label' => 'Em Atraso', 'value' => $atraso, 'color' => 'red'],
                 ];
             @endphp

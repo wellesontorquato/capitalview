@@ -13,51 +13,99 @@ class DashboardController extends Controller
 {
     public function index(Request $request, ReportExportService $exporter)
     {
-        // ----- KPIs do topo -----
+        // ================= HELPERS =================
+
+        $moeda = fn($v) => 'R$ ' . number_format((float)$v, 2, ',', '.');
+
+        // Se existir status no empréstimo, podemos excluir quitados (segurança extra)
+        $hasEmprestimoStatus = Schema::hasColumn('emprestimos', 'status');
+
+        // “Parcela ajustada” (se existir) senão usa valor_parcela
+        $parcelaValor = function ($p): float {
+            $parcelaAjustada = $p->valor_parcela_ajustada ?? null;
+            return (float) ($parcelaAjustada !== null ? $parcelaAjustada : $p->valor_parcela);
+        };
+
+        // “Total pago” robusto:
+        // 1) total_pago (se existir/preenchido)
+        // 2) valor_pago (se existir/preenchido)
+        // 3) pagamentos_sum_valor (from withSum)
+        // 4) relação pagamentos->sum('valor') (fallback)
+        $parcelaPago = function ($p): float {
+            if (isset($p->total_pago) && $p->total_pago !== null) {
+                return (float) $p->total_pago;
+            }
+            if (isset($p->valor_pago) && $p->valor_pago !== null) {
+                return (float) $p->valor_pago;
+            }
+            if (isset($p->pagamentos_sum_valor) && $p->pagamentos_sum_valor !== null) {
+                return (float) $p->pagamentos_sum_valor;
+            }
+            if (isset($p->pagamentos)) {
+                return (float) $p->pagamentos->sum('valor');
+            }
+            return 0.0;
+        };
+
+        // Saldo atual (nunca negativo)
+        $saldoAtual = function ($p) use ($parcelaValor, $parcelaPago): float {
+            $valor = $parcelaValor($p);
+            $pago  = $parcelaPago($p);
+            return max(0, $valor - $pago);
+        };
+
+        // Base query de parcelas "em aberto" (mais segura)
+        $parcelasEmAbertoQuery = Parcela::query()
+            // se existir relação pagamentos, já traz soma por SQL
+            ->withSum('pagamentos', 'valor')
+            // filtra status != paga (case-insensitive)
+            ->whereRaw('LOWER(status) != ?', ['paga']);
+
+        // Se existir status no empréstimo, exclui empréstimos quitados (extra)
+        if ($hasEmprestimoStatus) {
+            $parcelasEmAbertoQuery->whereHas('emprestimo', function ($q) {
+                $q->whereRaw('LOWER(status) != ?', ['quitado']);
+            });
+        }
+
+        // ================= KPIs =================
+
+        // Total emprestado: soma do principal (independente de estar quitado)
         $totalEmprestado = (float) Emprestimo::sum('valor_principal');
 
-        $aberto = (float) Parcela::where('status','!=','paga')
+        // Em aberto: soma do saldo das parcelas pendentes
+        $aberto = (float) (clone $parcelasEmAbertoQuery)
             ->get()
-            ->sum(function ($p) {
-                $parcelaAjustada = $p->valor_parcela_ajustada ?? $p->valor_parcela;
-                $totalPago       = $p->total_pago ?? $p->valor_pago;
-                return max(0, (float)$parcelaAjustada - (float)$totalPago);
-            });
+            ->sum(fn($p) => $saldoAtual($p));
 
-        $ate30 = (float) Parcela::where('status','!=','paga')
-            ->whereDate('vencimento','<=', now()->addDays(30))
+        // Vence em 30 dias: saldo das parcelas pendentes com vencimento <= hoje+30 (e >= hoje)
+        $ate30 = (float) (clone $parcelasEmAbertoQuery)
+            ->whereDate('vencimento', '>=', now()->toDateString())
+            ->whereDate('vencimento', '<=', now()->addDays(30)->toDateString())
             ->get()
-            ->sum(function ($p) {
-                $parcelaAjustada = $p->valor_parcela_ajustada ?? $p->valor_parcela;
-                $totalPago       = $p->total_pago ?? $p->valor_pago;
-                return max(0, (float)$parcelaAjustada - (float)$totalPago);
-            });
+            ->sum(fn($p) => $saldoAtual($p));
 
-        $atraso = (float) Parcela::where('status','!=','paga')
-            ->whereDate('vencimento','<', now()->toDateString())
+        // Em atraso: saldo das parcelas pendentes vencidas
+        $atraso = (float) (clone $parcelasEmAbertoQuery)
+            ->whereDate('vencimento', '<', now()->toDateString())
             ->get()
-            ->sum(function ($p) {
-                $parcelaAjustada = $p->valor_parcela_ajustada ?? $p->valor_parcela;
-                $totalPago       = $p->total_pago ?? $p->valor_pago;
-                return max(0, (float)$parcelaAjustada - (float)$totalPago);
-            });
+            ->sum(fn($p) => $saldoAtual($p));
 
-        // ----- Próximos vencimentos: SOMENTE mês atual + paginação -----
+        // ================= PRÓXIMOS VENCIMENTOS (MÊS ATUAL) =================
+
         $start = Carbon::now()->startOfMonth()->toDateString();
         $end   = Carbon::now()->endOfMonth()->toDateString();
 
-        $proximas = Parcela::with('emprestimo.cliente')
-            ->where('status','!=','paga')
+        $proximas = (clone $parcelasEmAbertoQuery)
+            ->with('emprestimo.cliente')
             ->whereBetween('vencimento', [$start, $end])
             ->orderBy('vencimento')
             ->paginate(10)
             ->appends($request->query());
 
         // Decora para a view
-        $proximas->getCollection()->transform(function ($p) {
-            $parcelaAjustada = $p->valor_parcela_ajustada ?? $p->valor_parcela;
-            $totalPago       = $p->total_pago ?? $p->valor_pago;
-            $p->saldo_atual    = max(0, (float)$parcelaAjustada - (float)$totalPago);
+        $proximas->getCollection()->transform(function ($p) use ($saldoAtual) {
+            $p->saldo_atual    = $saldoAtual($p);
             $p->vencimento_fmt = Carbon::parse($p->vencimento)->format('d/m/Y');
             return $p;
         });
@@ -67,11 +115,14 @@ class DashboardController extends Controller
             $exp  = strtolower((string) $request->get('export')); // pdf|xlsx|csv
             $what = strtolower((string) $request->get('what', 'vencimentos'));
 
-            // Helpers
-            $moeda = fn($v) => 'R$ ' . number_format((float)$v, 2, ',', '.');
+            $hrefExport = function (string $format, string $what) use ($request) {
+                return route('dashboard', array_merge($request->all(), [
+                    'export' => $format,
+                    'what'   => $what,
+                ]));
+            };
 
             if ($what === 'kpis') {
-                // ---- KPIs ----
                 $rows = [
                     ['Métrica' => 'Total emprestado', 'Valor' => $moeda($totalEmprestado)],
                     ['Métrica' => 'Aberto (a receber)', 'Valor' => $moeda($aberto)],
@@ -91,29 +142,23 @@ class DashboardController extends Controller
             }
 
             // ---- Próximos vencimentos (mês atual, sem paginação) ----
-            $parcelas = Parcela::with(['emprestimo.cliente', 'pagamentos'])
-                ->where('status','!=','paga')
+            $parcelas = (clone $parcelasEmAbertoQuery)
+                ->with(['emprestimo.cliente', 'pagamentos'])
                 ->whereBetween('vencimento', [$start, $end])
                 ->orderBy('vencimento')
                 ->get();
 
-            $rows = $parcelas->map(function ($p) use ($moeda) {
-                $parcelaAjustada = $p->valor_parcela_ajustada ?? $p->valor_parcela;
-                // total pago: tenta accessor/coluna; se indisponível, soma da relação
-                $pago = (float) (
-                    $p->total_pago
-                    ?? $p->valor_pago
-                    ?? optional($p->pagamentos)->sum('valor')
-                    ?? 0
-                );
-                $saldo = max(0, (float)$parcelaAjustada - $pago);
+            $rows = $parcelas->map(function ($p) use ($moeda, $parcelaValor, $parcelaPago, $saldoAtual) {
+                $valor = $parcelaValor($p);
+                $pago  = $parcelaPago($p);
+                $saldo = $saldoAtual($p);
 
                 return [
                     'Data'         => Carbon::parse($p->vencimento)->format('d/m/Y'),
                     'Cliente'      => $p->emprestimo?->cliente?->nome ?? '—',
                     'Empréstimo #' => $p->emprestimo?->id ?? '—',
                     'Parcela #'    => $p->numero,
-                    'Parcela'      => $moeda($parcelaAjustada),
+                    'Parcela'      => $moeda($valor),
                     'Pago'         => $moeda($pago),
                     'Saldo'        => $moeda($saldo),
                 ];
